@@ -1,0 +1,355 @@
+# Help on class UserProxyAgent in module autogen_agentchat.agents._user_proxy_agent:
+
+# class UserProxyAgent(autogen_agentchat.agents._base_chat_agent.BaseChatAgent, autogen_core._component_config.Component)
+#  |  UserProxyAgent(
+#  |      name: str,
+#  |      *,
+#  |      description: str = 'A human user',
+#  |      input_func: Union[Callable[[str], str], Callable[[str, Optional[autogen_core._cancellation_token.CancellationToken]], Awaitable[str]], NoneType] = None
+#  |  ) -> None
+#  |
+#  |  An agent that can represent a human user through an input function.
+#  |
+#  |  This agent can be used to represent a human user in a chat system by providing a custom input function.
+#  |
+#  |  .. note::
+#  |
+#  |      Using :class:`UserProxyAgent` puts a running team in a temporary blocked
+#  |      state until the user responds. So it is important to time out the user input
+#  |      function and cancel using the :class:`~autogen_core.CancellationToken` if the user does not respond.
+#  |      The input function should also handle exceptions and return a default response if needed.
+#  |
+#  |      For typical use cases that involve
+#  |      slow human responses, it is recommended to use termination conditions
+#  |      such as :class:`~autogen_agentchat.conditions.HandoffTermination` or :class:`~autogen_agentchat.conditions.SourceMatchTermination`
+#  |      to stop the running team and return the control to the application.
+#  |      You can run the team again with the user input. This way, the state of the team
+#  |      can be saved and restored when the user responds.
+#  |
+#  |      See `Human-in-the-loop <https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/tutorial/human-in-the-loop.html>`_ for more information.
+#  |
+#  |  Args:
+#  |      name (str): The name of the agent.
+#  |      description (str, optional): A description of the agent.
+#  |      input_func (Optional[Callable[[str], str]], Callable[[str, Optional[CancellationToken]], Awaitable[str]]): A function that takes a prompt and returns a user input string.
+#  |
+#  |  For examples of integrating with web and UI frameworks, see the following:
+#  |
+#  |  * `FastAPI <https://github.com/microsoft/autogen/tree/main/python/samples/agentchat_fastapi>`_
+#  |  * `ChainLit <https://github.com/microsoft/autogen/tree/main/python/samples/agentchat_chainlit>`_
+#  |
+#  |  Example:
+#  |      Simple usage case::
+#  |
+#  |          import asyncio
+#  |          from autogen_core import CancellationToken
+#  |          from autogen_agentchat.agents import UserProxyAgent
+#  |          from autogen_agentchat.messages import TextMessage
+#  |
+#  |
+#  |          async def simple_user_agent():
+#  |              agent = UserProxyAgent("user_proxy")
+#  |              response = await asyncio.create_task(
+#  |                  agent.on_messages(
+#  |                      [TextMessage(content="What is your name? ", source="user")],
+#  |                      cancellation_token=CancellationToken(),
+#  |                  )
+#  |              )
+#  |              assert isinstance(response.chat_message, TextMessage)
+#  |              print(f"Your name is {response.chat_message.content}")
+#  |
+#  |  Example:
+#  |      Cancellable usage case::
+#  |
+#  |          import asyncio
+#  |          from typing import Any
+#  |          from autogen_core import CancellationToken
+#  |          from autogen_agentchat.agents import UserProxyAgent
+#  |          from autogen_agentchat.messages import TextMessage
+#  |
+#  |
+#  |          token = CancellationToken()
+#  |          agent = UserProxyAgent("user_proxy")
+#  |
+#  |
+#  |          async def timeout(delay: float):
+#  |              await asyncio.sleep(delay)
+#  |
+#  |
+#  |          def cancellation_callback(task: asyncio.Task[Any]):
+#  |              token.cancel()
+#  |
+#  |
+#  |          async def cancellable_user_agent():
+#  |              try:
+#  |                  timeout_task = asyncio.create_task(timeout(3))
+#  |                  timeout_task.add_done_callback(cancellation_callback)
+#  |                  agent_task = asyncio.create_task(
+#  |                      agent.on_messages(
+#  |                          [TextMessage(content="What is your name? ", source="user")],
+#  |                          cancellation_token=token,
+#  |                      )
+#  |                  )
+#  |                  response = await agent_task
+#  |                  assert isinstance(response.chat_message, TextMessage)
+#  |                  print(f"Your name is {response.chat_message.content}")
+#  |              except Exception as e:
+#  |                  print(f"Exception: {e}")
+#  |              except BaseException as e:
+#  |                  print(f"BaseException: {e}")
+#  |
+#  |  Method resolution order:
+#  |      UserProxyAgent
+#  |      autogen_agentchat.agents._base_chat_agent.BaseChatAgent
+#  |      autogen_agentchat.base._chat_agent.ChatAgent
+#  |      abc.ABC
+#  |      autogen_agentchat.base._task.TaskRunner
+#  |      typing.Protocol
+#  |      autogen_core._component_config.ComponentBase
+#  |      autogen_core._component_config.ComponentToConfig
+#  |      autogen_core._component_config.ComponentLoader
+#  |      autogen_core._component_config.Component
+#  |      autogen_core._component_config.ComponentFromConfig
+#  |      autogen_core._component_config.ComponentSchemaType
+#  |      typing.Generic
+#  |      builtins.object
+#  |
+#  |  Methods defined here:
+#  |
+#  |  __init__(
+#  |      self,
+#  |      name: str,
+#  |      *,
+#  |      description: str = 'A human user',
+#  |      input_func: Union[Callable[[str], str], Callable[[str, Optional[autogen_core._cancellation_token.CancellationToken]], Awaitable[str]], NoneType] = None
+#  |  ) -> None
+#  |      Initialize the UserProxyAgent.
+#  |
+#  |  async on_messages(
+#  |      self,
+#  |      messages: Sequence[autogen_agentchat.messages.BaseChatMessage],
+#  |      cancellation_token: autogen_core._cancellation_token.CancellationToken
+#  |  ) -> autogen_agentchat.base._chat_agent.Response
+#  |      Handles incoming messages and returns a response.
+#  |
+#  |      .. note::
+#  |
+#  |          Agents are stateful and the messages passed to this method should
+#  |          be the new messages since the last call to this method. The agent
+#  |          should maintain its state between calls to this method. For example,
+#  |          if the agent needs to remember the previous messages to respond to
+#  |          the current message, it should store the previous messages in the
+#  |          agent state.
+#  |
+#  |  async on_messages_stream(
+#  |      self,
+#  |      messages: Sequence[autogen_agentchat.messages.BaseChatMessage],
+#  |      cancellation_token: autogen_core._cancellation_token.CancellationToken
+#  |  ) -> AsyncGenerator[autogen_agentchat.messages.BaseAgentEvent | autogen_agentchat.messages.BaseChatMessage | autogen_agentchat.base._chat_agent.Response, NoneType]
+#  |      Handle incoming messages by requesting user input.
+#  |
+#  |  async on_reset(
+#  |      self,
+#  |      cancellation_token: Optional[autogen_core._cancellation_token.CancellationToken] = None
+#  |  ) -> None
+#  |      Reset agent state.
+#  |
+#  |  ----------------------------------------------------------------------
+#  |  Class methods defined here:
+#  |
+#  |  __subclasshook__ = _proto_hook(other) from typing
+#  |
+#  |  ----------------------------------------------------------------------
+#  |  Readonly properties defined here:
+#  |
+#  |  produced_message_types
+#  |      Message types this agent can produce.
+#  |
+#  |  ----------------------------------------------------------------------
+#  |  Data and other attributes defined here:
+#  |
+#  |  InputRequestContext = <class 'autogen_agentchat.agents._user_proxy_age...
+#  |
+#  |  __abstractmethods__ = frozenset()
+#  |
+#  |  __annotations__ = {}
+#  |
+#  |  __orig_bases__ = (<class 'autogen_agentchat.agents._base_chat_agent.Ba...
+#  |
+#  |  __parameters__ = ()
+#  |
+#  |  component_config_schema = <class 'autogen_agentchat.agents._user_proxy...
+#  |      Declarative configuration for the UserProxyAgent.
+#  |
+#  |
+#  |  component_provider_override = 'autogen_agentchat.agents.UserProxyAgent...
+#  |
+#  |  component_type = 'agent'
+#  |
+#  |  ----------------------------------------------------------------------
+#  |  Methods inherited from autogen_agentchat.agents._base_chat_agent.BaseChatAgent:
+#  |
+#  |  async close(self) -> None
+#  |      Release any resources held by the agent. This is a no-op by default in the
+#  |      :class:`BaseChatAgent` class. Subclasses can override this method to
+#  |      implement custom close behavior.
+#  |
+#  |  async load_state(self, state: Mapping[str, Any]) -> None
+#  |      Restore agent from saved state. Default implementation for stateless agents.
+#  |
+#  |  async on_pause(
+#  |      self,
+#  |      cancellation_token: autogen_core._cancellation_token.CancellationToken
+#  |  ) -> None
+#  |      Called when the agent is paused while running in its :meth:`on_messages` or
+#  |      :meth:`on_messages_stream` method. This is a no-op by default in the
+#  |      :class:`BaseChatAgent` class. Subclasses can override this method to
+#  |      implement custom pause behavior.
+#  |
+#  |  async on_resume(
+#  |      self,
+#  |      cancellation_token: autogen_core._cancellation_token.CancellationToken
+#  |  ) -> None
+#  |      Called when the agent is resumed from a pause while running in
+#  |      its :meth:`on_messages` or :meth:`on_messages_stream` method.
+#  |      This is a no-op by default in the :class:`BaseChatAgent` class.
+#  |      Subclasses can override this method to implement custom resume behavior.
+#  |
+#  |  async run(
+#  |      self,
+#  |      *,
+#  |      task: Union[str, autogen_agentchat.messages.BaseChatMessage, Sequence[autogen_agentchat.messages.BaseChatMessage], NoneType] = None,
+#  |      cancellation_token: autogen_core._cancellation_token.CancellationToken | None = None,
+#  |      output_task_messages: bool = True
+#  |  ) -> autogen_agentchat.base._task.TaskResult
+#  |      Run the agent with the given task and return the result.
+#  |
+#  |  async run_stream(
+#  |      self,
+#  |      *,
+#  |      task: Union[str, autogen_agentchat.messages.BaseChatMessage, Sequence[autogen_agentchat.messages.BaseChatMessage], NoneType] = None,
+#  |      cancellation_token: autogen_core._cancellation_token.CancellationToken | None = None,
+#  |      output_task_messages: bool = True
+#  |  ) -> AsyncGenerator[autogen_agentchat.messages.BaseAgentEvent | autogen_agentchat.messages.BaseChatMessage | autogen_agentchat.base._task.TaskResult, NoneType]
+#  |      Run the agent with the given task and return a stream of messages
+#  |      and the final task result as the last item in the stream.
+#  |
+#  |      Args:
+#  |          task: The task to run. Can be a string, a single message, or a sequence of messages.
+#  |          cancellation_token: The cancellation token to kill the task immediately.
+#  |          output_task_messages: Whether to include task messages in the output stream. Defaults to True for backward compatibility.
+#  |
+#  |  async save_state(self) -> Mapping[str, Any]
+#  |      Export state. Default implementation for stateless agents.
+#  |
+#  |  ----------------------------------------------------------------------
+#  |  Readonly properties inherited from autogen_agentchat.agents._base_chat_agent.BaseChatAgent:
+#  |
+#  |  description
+#  |      The description of the agent. This is used by team to
+#  |      make decisions about which agents to use. The description should
+#  |      describe the agent's capabilities and how to interact with it.
+#  |
+#  |  name
+#  |      The name of the agent. This is used by team to uniquely identify
+#  |      the agent. It should be unique within the team.
+#  |
+#  |  ----------------------------------------------------------------------
+#  |  Data descriptors inherited from autogen_agentchat.base._chat_agent.ChatAgent:
+#  |
+#  |  __dict__
+#  |      dictionary for instance variables
+#  |
+#  |  __weakref__
+#  |      list of weak references to the object
+#  |
+#  |  ----------------------------------------------------------------------
+#  |  Data and other attributes inherited from autogen_agentchat.base._task.TaskRunner:
+#  |
+#  |  __protocol_attrs__ = {'run', 'run_stream'}
+#  |
+#  |  ----------------------------------------------------------------------
+#  |  Class methods inherited from typing.Protocol:
+#  |
+#  |  __init_subclass__(*args, **kwargs)
+#  |      This method is called when a class is subclassed.
+#  |
+#  |      The default implementation does nothing. It may be
+#  |      overridden to extend subclasses.
+#  |
+#  |  ----------------------------------------------------------------------
+#  |  Methods inherited from autogen_core._component_config.ComponentToConfig:
+#  |
+#  |  dump_component(self) -> 'ComponentModel'
+#  |      Dump the component to a model that can be loaded back in.
+#  |
+#  |      Raises:
+#  |          TypeError: If the component is a local class.
+#  |
+#  |      Returns:
+#  |          ComponentModel: The model representing the component.
+#  |
+#  |  ----------------------------------------------------------------------
+#  |  Data and other attributes inherited from autogen_core._component_config.ComponentToConfig:
+#  |
+#  |  component_description = None
+#  |
+#  |  component_label = None
+#  |
+#  |  component_version = 1
+#  |
+#  |  ----------------------------------------------------------------------
+#  |  Class methods inherited from autogen_core._component_config.ComponentLoader:
+#  |
+#  |  load_component(
+#  |      model: 'ComponentModel | Dict[str, Any]',
+#  |      expected: 'Type[ExpectedType] | None' = None
+#  |  ) -> 'Self | ExpectedType'
+#  |      Load a component from a model. Intended to be used with the return type of :py:meth:`autogen_core.ComponentConfig.dump_component`.
+#  |
+#  |      Example:
+#  |
+#  |          .. code-block:: python
+#  |
+#  |              from autogen_core import ComponentModel
+#  |              from autogen_core.models import ChatCompletionClient
+#  |
+#  |              component: ComponentModel = ...  # type: ignore
+#  |
+#  |              model_client = ChatCompletionClient.load_component(component)
+#  |
+#  |      Args:
+#  |          model (ComponentModel): The model to load the component from.
+#  |
+#  |      Returns:
+#  |          Self: The loaded component.
+#  |
+#  |      Args:
+#  |          model (ComponentModel): _description_
+#  |          expected (Type[ExpectedType] | None, optional): Explicit type only if used directly on ComponentLoader. Defaults to None.
+#  |
+#  |      Raises:
+#  |          ValueError: If the provider string is invalid.
+#  |          TypeError: Provider is not a subclass of ComponentConfigImpl, or the expected type does not match.
+#  |
+#  |      Returns:
+#  |          Self | ExpectedType: The loaded component.
+#  |
+#  |  ----------------------------------------------------------------------
+#  |  Data and other attributes inherited from autogen_core._component_config.ComponentSchemaType:
+#  |
+#  |  required_class_vars = ['component_config_schema', 'component_type']
+#  |
+#  |  ----------------------------------------------------------------------
+#  |  Class methods inherited from typing.Generic:
+#  |
+#  |  __class_getitem__(...)
+#  |      Parameterizes a generic class.
+#  |
+#  |      At least, parameterizing a generic class is the *main* thing this
+#  |      method does. For example, for some generic class `Foo`, this is called
+#  |      when we do `Foo[int]` - there, with `cls=Foo` and `params=int`.
+#  |
+#  |      However, note that this method is also called when defining generic
+#  |      classes in the first place with `class Foo[T]: ...`.
+

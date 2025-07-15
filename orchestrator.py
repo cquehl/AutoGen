@@ -1,13 +1,9 @@
 # orchestrator.py
 
 import asyncio
-
-# Setup and Security
 from config.settings import check_ip_address, get_gemini_client
+from workflows import direct_call, agentic_fibonacci, messages_tut
 
-# Import the runnable workflows
-from workflows import direct_call
-from workflows import agentic_fibonacci
 
 async def start_workflows():
     """
@@ -21,4 +17,5 @@ async def start_workflows():
 
     # --- 2. Run Your Selected Workflows ---
     await direct_call.run(gemini_client)
-    #await agentic_fibonacci.run(gemini_client)
+    # await agentic_fibonacci.run(gemini_client)
+    await messages_tut.run(gemini_client)

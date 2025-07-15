@@ -1,0 +1,60 @@
+(.venv) cjq in ~/CODE-AutoGen on main λ python -c "from autogen_agentchat.agents import AssistantAgent; help(AssistantAgent)"
+
+
+Help on class AssistantAgent in module autogen_agentchat.agents._assistant_agent:
+
+class AssistantAgent(autogen_agentchat.agents._base_chat_agent.BaseChatAgent, autogen_core._component_config.Component)
+ |  AssistantAgent(
+ |      name: 'str',
+ |      model_client: 'ChatCompletionClient',
+ |      *,
+ |      tools: 'List[BaseTool[Any, Any] | Callable[..., Any] | Callable[..., Awaitable[Any]]] | None' = None,
+ |      workbench: 'Workbench | Sequence[Workbench] | None' = None,
+ |      handoffs: 'List[HandoffBase | str] | None' = None,
+ |      model_context: 'ChatCompletionContext | None' = None,
+ |      description: 'str' = 'An agent that provides assistance with ability to use tools.',
+ |      system_message: 'str | None' = 'You are a helpful AI assistant. Solve tasks using your tools. Reply with TERMINATE when the task has been completed.',
+ |      model_client_stream: 'bool' = False,
+ |      reflect_on_tool_use: 'bool | None' = None,
+ |      max_tool_iterations: 'int' = 1,
+ |      tool_call_summary_format: 'str' = '{result}',
+ |      tool_call_summary_formatter: 'Callable[[FunctionCall, FunctionExecutionResult], str] | None' = None,
+ |      output_content_type: 'type[BaseModel] | None' = None,
+ |      output_content_type_format: 'str | None' = None,
+ |      memory: 'Sequence[Memory] | None' = None,
+ |      metadata: 'Dict[str, str] | None' = None
+ |  )
+ |
+ |  An agent that provides assistance with tool use.
+ |  The :meth:`on_messages` returns a :class:`~autogen_agentchat.base.Response`
+ |  in which :attr:`~autogen_agentchat.base.Response.chat_message` is the final
+ |  response message.
+ |
+ |  The :meth:`on_messages_stream` creates an async generator that produces
+ |  the inner messages as they are created, and the :class:`~autogen_agentchat.base.Response`
+ |  object as the last item before closing the generator.
+ |
+ |  The :meth:`BaseChatAgent.run` method returns a :class:`~autogen_agentchat.base.TaskResult`
+ |  containing the messages produced by the agent. In the list of messages,
+ |  :attr:`~autogen_agentchat.base.TaskResult.messages`,
+ |  the last message is the final response message.
+ |
+ |  The :meth:`BaseChatAgent.run_stream` method creates an async generator that produces
+ |  the inner messages as they are created, and the :class:`~autogen_agentchat.base.TaskResult`
+ |  object as the last item before closing the generator.
+ |
+ |  .. attention::
+ |
+ |      The caller must only pass the new messages to the agent on each call
+ |      to the :meth:`on_messages`, :meth:`on_messages_stream`, :meth:`BaseChatAgent.run`,
+ |      or :meth:`BaseChatAgent.run_stream` methods.
+ |      The agent maintains its state between calls to these methods.
+ |      Do not pass the entire conversation history to the agent on each call.
+ |
+ |  .. warning::
+ |      The assistant agent is not thread-safe or coroutine-safe.
+ |      It should not be shared between multiple tasks or coroutines, and it should
+ |      not call its methods concurrently.
+ |
+ |  The following diagram shows how the assistant agent works:
+ Help on AssistantAgent line 1 (press h for help or q to quit)
