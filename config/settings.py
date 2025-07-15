@@ -4,12 +4,13 @@ import os
 import requests
 import warnings
 from dotenv import load_dotenv
-from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_ext.models.openai import OpenAIChatCompletionClient, AzureOpenAIChatCompletionClient
+from azure.core.credentials import AzureKeyCredential
+from autogen_core.models import ModelFamily
 
 load_dotenv()
 
 def check_ip_address():
-    # This function is fine as-is
     allowed_ip = os.environ.get("ALLOWED_IP")
     if not allowed_ip:
         warnings.warn("ALLOWED_IP not set in .env. Skipping IP check.", UserWarning)
@@ -40,4 +41,41 @@ def get_gemini_client():
         api_key=google_api_key,
         base_url="https://generativelanguage.googleapis.com/v1beta",
     )
+    return model_client
+
+
+def get_azure_openai_client():
+    """Loads Azure OpenAI credentials and returns a client instance."""
+    api_key = os.environ.get("AZURE_OPENAI_API_KEY")
+    endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+    api_version = "2024-02-01"  # Define the API version
+    deployment_name = "StellaSource-GPT4o"
+
+    if not all([api_key, endpoint]):
+        raise ValueError("FATAL: AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT must be in your .env file.")
+
+    # Construct the full URL to the deployment
+    full_endpoint_url = f"{endpoint.rstrip('/')}/openai/deployments/{deployment_name}"
+
+    model_info = {
+        "model": deployment_name,
+        "family": ModelFamily.GPT_4O,
+        "vision": True,
+        "function_calling": True,
+        "json_output": True,
+        "structured_output": True,
+        "context_window": 128000,
+        "price": [5.00, 15.00],
+    }
+
+    # --- FIX: Initialize the client using the credential object ---
+    model_client = AzureOpenAIChatCompletionClient(
+        model=deployment_name,
+        model_info=model_info,
+        endpoint=full_endpoint_url,
+        credential=AzureKeyCredential(api_key),
+        api_version=api_version,
+    )
+    
+    print(f"✅ Client configured for Azure deployment: {deployment_name}")
     return model_client
