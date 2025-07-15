@@ -28,7 +28,6 @@ async def get_local_forecast() -> dict | str:
     except Exception as e:
         return f"An unexpected error occurred: {e}"
 
-# --- FIX: Create the 'run' function that the orchestrator can call ---
 async def run(client: OpenAIChatCompletionClient):
     """
     Executes the weather agent workflow using a provided client.

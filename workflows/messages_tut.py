@@ -16,7 +16,6 @@ async def run(client: OpenAIChatCompletionClient):
 
     try:
         content="Hello, world!"
-        # text_message = TextMessage(content="Hello, world!", source="User")
 
         response = await call_ai(client, content)
     
@@ -31,3 +30,6 @@ async def run(client: OpenAIChatCompletionClient):
     finally:
         print("---------------------------------")
         print("--- Direct Call Workflow Finished ---")
+
+
+        

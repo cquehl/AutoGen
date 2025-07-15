@@ -27,6 +27,6 @@ async def start_workflows():
 
     # --- 2. Run Your Selected Workflows ---
     await direct_call.run(ai_client)
-    # await agentic_fibonacci.run(gemini_client)
-    # await messages_tut.run(gemini_client)
-    # await weather_ai.run(gemini_client)
+    # await agentic_fibonacci.run(ai_client)
+    # await messages_tut.run(ai_client)
+    await weather_ai.run(ai_client)
