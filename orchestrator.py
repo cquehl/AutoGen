@@ -3,7 +3,7 @@
 import asyncio
 
 # Setup and Security
-from authenticate import check_ip_address, get_gemini_client
+from config.settings import check_ip_address, get_gemini_client
 
 # Import the runnable workflows
 from workflows import direct_call
@@ -21,5 +21,4 @@ async def start_workflows():
 
     # --- 2. Run Your Selected Workflows ---
     await direct_call.run(gemini_client)
-    
-    # await agentic_fibonacci.run(gemini_client)
+    #await agentic_fibonacci.run(gemini_client)

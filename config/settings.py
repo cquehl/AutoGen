@@ -1,19 +1,15 @@
-# authenticate.py
+# settings.py
 
 import os
 import requests
 import warnings
 from dotenv import load_dotenv
-
-# New imports needed for the client
 from autogen_ext.models.openai import OpenAIChatCompletionClient
-from autogen_core.models import ModelInfo
 
-# Load environment variables
 load_dotenv()
 
 def check_ip_address():
-    # ... (this function remains exactly the same)
+    # This function is fine as-is
     allowed_ip = os.environ.get("ALLOWED_IP")
     if not allowed_ip:
         warnings.warn("ALLOWED_IP not set in .env. Skipping IP check.", UserWarning)
@@ -33,17 +29,15 @@ def check_ip_address():
     except requests.exceptions.RequestException as e:
         warnings.warn(f"Could not check IP address: {e}", UserWarning)
 
-# This function is updated to return a client instance
 def get_gemini_client():
     """Loads the Google API key and returns an OpenAIChatCompletionClient instance."""
     google_api_key = os.environ.get("GOOGLE_API_KEY")
     if not google_api_key:
         raise ValueError("FATAL: GOOGLE_API_KEY not found in .env file.")
 
-    # Create the client instance as shown in the documentation
     model_client = OpenAIChatCompletionClient(
-        model="gemini-1.5-flash", # Use a valid Gemini model
+        model="gemini-1.5-flash",
         api_key=google_api_key,
-        base_url="https://generativelanguage.googleapis.com/v1beta", # The OpenAI-compatible endpoint
+        base_url="https://generativelanguage.googleapis.com/v1beta",
     )
     return model_client
