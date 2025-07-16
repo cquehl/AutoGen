@@ -1,55 +1,38 @@
 # workflows/weather_ai.py
 
 import asyncio
-import httpx
-from autogen_agentchat.agents import AssistantAgent
-from autogen_agentchat.ui import Console
-from autogen_ext.models.openai import OpenAIChatCompletionClient
+from pyautogen import AssistantAgent, UserProxyAgent
 
-# The tool definition remains the same
-async def get_local_forecast() -> dict | str:
+async def run(llm_config: dict):
     """
-    Gets the 7-day weather forecast for a predefined location
-    (Turpin Hills, OH gridpoint).
-    Returns the full JSON 'properties' object from the weather.gov API.
+    A simple agentic workflow that uses the provided llm_config.
+    This is a standalone example of a two-agent chat.
     """
-    forecast_url = "https://api.weather.gov/gridpoints/ILN/36,41/forecast"
-    headers = { "User-Agent": "AutoGenWeatherAgent (contact: your_email@example.com)" }
+    print("\n--- Starting Basic AI Workflow ---")
 
-    try:
-        print("TOOL CALLED")
-        async with httpx.AsyncClient(headers=headers) as client:
-            response = await client.get(forecast_url)
-            response.raise_for_status()
-            forecast_data = response.json()
-            return forecast_data["properties"]
-    except httpx.HTTPStatusError as e:
-        return f"Error fetching weather data: {e.response.status_code}"
-    except Exception as e:
-        return f"An unexpected error occurred: {e}"
-
-# --- FIX: Create the 'run' function that the orchestrator can call ---
-async def run(client: OpenAIChatCompletionClient):
-    """
-    Executes the weather agent workflow using a provided client.
-    """
-    print("\n--- Starting Weather Agent Workflow ---")
-    
-    # Use the client passed from the orchestrator
-    model_client = client
-    
-    # Define the AssistantAgent
-    agent = AssistantAgent(
-        name="weather_agent",
-        model_client=model_client,
-        tools=[get_local_forecast],
-        system_message="""You are a helpful assistant that tells the user about their local weather forecast
-            in Turpin Hills, Ohio. Use the get_local_forecast tool to get the data.""",
-        reflect_on_tool_use=True,
-        model_client_stream=True,
+    # 1. Create an Assistant Agent
+    # The agent is configured with the llm_config dictionary.
+    assistant = AssistantAgent(
+        name="AI_Assistant",
+        llm_config=llm_config,
+        system_message="You are a helpful AI assistant. Provide a concise answer."
     )
 
-    # Run the agent and stream the messages to the console
-    await Console(agent.run_stream(task="What is the weather in Turpin Hills, Ohio?"))
-    
-    print("--- Weather Agent Workflow Finished ---")
+    # 2. Create a User Proxy Agent
+    # This agent acts on behalf of the user. `code_execution_config=False` means
+    # it won't try to execute any code.
+    user_proxy = UserProxyAgent(
+        name="User",
+        code_execution_config=False,
+        human_input_mode="NEVER", # No human input needed for this simple case.
+    )
+
+    # 3. Start the conversation
+    # The user_proxy initiates the chat with the assistant.
+    await user_proxy.a_initiate_chat(
+        assistant,
+        message="What is the most interesting fact about the planet Jupiter?",
+    )
+
+    print("\n--- Basic AI Workflow Finished ---")
+
