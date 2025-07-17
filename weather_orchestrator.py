@@ -4,8 +4,9 @@ import aioconsole
 from autogen_agentchat.teams import SelectorGroupChat
 from autogen_agentchat.conditions import TextMentionTermination
 from autogen_agentchat.ui import Console
-from autogen_ext.models.openai import OpenAIChatCompletionClient
-from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
+from autogen_core.models import ChatCompletionClient
+# from autogen_ext.models.openai import OpenAIChatCompletionClient
+# from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 
 
 from config.settings import get_azure_llm_config
@@ -19,7 +20,15 @@ async def run():
 
     # 1. Get the LLM configuration using the updated settings function
     llm_config = get_azure_llm_config()
-    ai_client = AzureOpenAIChatCompletionClient(**llm_config)
+
+    component_config = {
+        "provider": "azure_openai_chat_completion_client",
+        "config": llm_config
+    }
+
+    ai_client = ChatCompletionClient.load_component(component_config)
+
+    # ai_client = AzureOpenAIChatCompletionClient(**llm_config)
 
     # 2. Create the agents
     weather_agent = create_weather_agent(ai_client)
@@ -81,9 +90,11 @@ async def run():
             print("\nExiting program...")
             break
 
+    await ai_client.close()
+
     # --- END LOOP ---
 
-    await ai_client.close()
+    # await ai_client.close()
 
     print("\n--- Weather Agent Team Workflow Finished ---")
 

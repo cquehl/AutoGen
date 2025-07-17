@@ -74,6 +74,7 @@ def get_azure_llm_config():
         "api_version": api_version,
         # You can add other parameters like 'temperature' here if needed.
         "model_info": {
+            "model": "gpt-4o-2024-08-06",
             "family": "gpt-4o",              # Identify the underlying model family
             "vision": True,                  # It can process images
             "function_calling": True,        # It can use tools

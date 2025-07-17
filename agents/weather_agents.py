@@ -2,7 +2,7 @@
 from autogen_agentchat.agents import AssistantAgent, UserProxyAgent
 from autogen_core.tools import FunctionTool
 from autogen_core.models import ChatCompletionClient
-from typing import Callable, Awaitable, Optional, Any
+from typing import Callable, Awaitable, Optional
 
 from .weather_tool import get_local_forecast
 
@@ -62,6 +62,7 @@ def create_exec_agent(model_client: ChatCompletionClient) -> AssistantAgent:
         model_client=model_client,
         system_message="""
         You are a supervisor responsible for routing tasks. Based on the most recent user message, select the best agent from this list: ["Executive_Assistant", "Weather_Agent", "Joke_Agent", "Human_Admin"]
+        If there is no request then conversate with the HUMAN_ADMIN.
 
         **ROUTING LOGIC:**
         - If the user asks for a joke or something funny, you MUST select "Joke_Agent".
@@ -69,7 +70,7 @@ def create_exec_agent(model_client: ChatCompletionClient) -> AssistantAgent:
         - If the conversation is just beginning (e.g., "hello"), or if another agent just finished a task, you MUST select "Executive_Assistant" to manage the conversation.
 
         **OUTPUT FORMAT:**
-        Respond with ONLY the name of the agent you have selected. Do not add any other text, explanation, or punctuation. For example, if the user asks for a joke, your entire response must be only "Joke_Agent".
+        Relay the information from the other agents to the HUMAN_ADMIN.
         """,
     )
     return ea_agent
