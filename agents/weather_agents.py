@@ -7,44 +7,40 @@ from typing import Callable, Awaitable, Optional
 from .weather_tool import get_local_forecast
 
 def create_weather_agent(model_client: ChatCompletionClient) -> AssistantAgent:
-    """
-    Creates an AssistantAgent specialized in fetching weather forecasts.
-    It uses an llm_config dictionary for its model configuration.
-    """
     weather_agent = AssistantAgent(
         name="Weather_Agent",
         model_client=model_client,
-        tools=[FunctionTool(get_local_forecast, description="Returns local forecast from https://www.weather.gov/ api.")],
+        tools=[FunctionTool(get_local_forecast, description="...")],
         reflect_on_tool_use=True,
         system_message="""
-            You are a helpfull weather expert. Your job is to use the get_local_forecast tool
-            when asked about the weather. After you get the forecast, report the key 
-            details back to the group. If there is clear or cloudy skys and good wind to fly kites, let the user know. 
-            Do not ask for more information.
+            You are a helpful weather expert. Your process is:
+            1. Announce that you are fetching the weather.
+            2. Use the get_local_forecast tool.
+            3. After the tool returns data, CAREFULLY read the forecast for the 'Today', 'Tonight', and 'Friday' periods.
+            4. Formulate a friendly, natural language summary of just those periods. Do not return the raw JSON.
+            5. Mention if the wind and precipitation make it a good or bad day for flying kites.
             """
     )
     return weather_agent
 
-    
 def create_joke_agent(model_client: ChatCompletionClient) -> AssistantAgent:
-    """
-    An agent that tells jokes and makes puns.
-    """
     joke_agent = AssistantAgent(
         name="Joke_Agent",
         model_client=model_client,
         system_message="""
-            You are a helpfull assistant that tells jokes and makes puns. Use any context from the User_Admin in your jokes, if applicable.
+            You are a witty assistant that tells jokes.
+            1. **Announce Your Action**: Start by saying something like "Engaging humor protocols..."
+            2. **Tell the Joke**: Deliver a funny joke or pun.
             """
     )
     return joke_agent
 
+# ✅ ADD THIS FUNCTION BACK
 def create_human_user_proxy(
     input_func: Optional[Callable[..., Awaitable[str]]] = None
 ) -> UserProxyAgent:
     """
     Creates a UserProxyAgent for human-in-the-loop interaction.
-    In the new model, this agent's primary role is to provide user input.
     """
     user_proxy = UserProxyAgent(
         name="Human_Admin",
@@ -54,23 +50,12 @@ def create_human_user_proxy(
     return user_proxy
 
 def create_exec_agent(model_client: ChatCompletionClient) -> AssistantAgent:
-    """
-    Creates an AssistantAgent that acts as a professional Executive Assistant.
-    """
     ea_agent = AssistantAgent(
         name="Executive_Assistant",
         model_client=model_client,
         system_message="""
-        You are a supervisor responsible for routing tasks. Based on the most recent user message, select the best agent from this list: ["Executive_Assistant", "Weather_Agent", "Joke_Agent", "Human_Admin"]
-        If there is no request then conversate with the HUMAN_ADMIN.
-
-        **ROUTING LOGIC:**
-        - If the user asks for a joke or something funny, you MUST select "Joke_Agent".
-        - If the user asks for the weather, a forecast, or about kite-flying conditions, you MUST select "Weather_Agent".
-        - If the conversation is just beginning (e.g., "hello"), or if another agent just finished a task, you MUST select "Executive_Assistant" to manage the conversation.
-
-        **OUTPUT FORMAT:**
-        Relay the information from the other agents to the HUMAN_ADMIN.
-        """,
+        You are a silent routing supervisor. Based on the user's request, select the best agent from ["Weather_Agent", "Joke_Agent", "Human_Admin"].
+        Respond with ONLY a valid JSON object in the format: {"next_agent": "AGENT_NAME"}
+        """
     )
     return ea_agent
