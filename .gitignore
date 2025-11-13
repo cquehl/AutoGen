@@ -6,3 +6,12 @@
 
 # AutoGen config list if it contains secrets
 OAI_CONFIG_LIST
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# CLI history
+.autogen_cli/
