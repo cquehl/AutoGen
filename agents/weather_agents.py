@@ -1,5 +1,7 @@
 # agents/weather_agents.py
 from autogen_agentchat.agents import AssistantAgent, UserProxyAgent
+from autogen_agentchat.teams import SelectorGroupChat
+from autogen_agentchat.conditions import TextMentionTermination
 from autogen_core.tools import FunctionTool
 from autogen_core.models import ChatCompletionClient
 from typing import Callable, Awaitable, Optional
@@ -74,3 +76,90 @@ def create_exec_agent(model_client: ChatCompletionClient) -> AssistantAgent:
         """,
     )
     return ea_agent
+
+
+async def create_weather_agent_team(llm_config: dict) -> SelectorGroupChat:
+    """
+    Creates a multi-agent team with weather, joke, executive, and human-in-the-loop agents.
+
+    Args:
+        llm_config: LLM configuration dictionary from config/settings.py
+
+    Returns:
+        SelectorGroupChat team ready for interactive use
+    """
+    # Load the ChatCompletionClient from the config
+    component_config = {
+        "provider": "azure_openai_chat_completion_client",
+        "config": llm_config
+    }
+    ai_client = ChatCompletionClient.load_component(component_config)
+
+    # Create agents
+    weather_agent = create_weather_agent(ai_client)
+    joke_agent = create_joke_agent(ai_client)
+    exec_agent = create_exec_agent(ai_client)
+    user_proxy = create_human_user_proxy()
+
+    # Define the selector prompt for routing
+    selector_prompt = """
+    You are orchestrating a conversation between the following agents: {participants}.
+    Given the most recent message from the user or an agent, select the next agent to respond.
+
+    **SELECTION LOGIC:**
+    - If the user asks for a joke or something funny, select "Joke_Agent".
+    - If the user asks for the weather or kite-flying conditions, select "Weather_Agent".
+    - If an agent just completed a task, select "Executive_Assistant" to relay the information.
+    - If the user provides a new task, select "Executive_Assistant" to coordinate.
+    - The Human_Admin speaks when providing new input.
+
+    Reply with just the agent name and nothing else.
+    """
+
+    # Create the team
+    team = SelectorGroupChat(
+        participants=[weather_agent, user_proxy, joke_agent, exec_agent],
+        model_client=ai_client,
+        termination_condition=TextMentionTermination("TERMINATE"),
+        selector_prompt=selector_prompt,
+        max_turns=12,
+        allow_repeated_speaker=False
+    )
+
+    return team
+
+
+async def create_simple_assistant(llm_config: dict) -> AssistantAgent:
+    """
+    Creates a simple single-agent assistant for general tasks.
+
+    Args:
+        llm_config: LLM configuration dictionary from config/settings.py
+
+    Returns:
+        AssistantAgent ready for interactive use
+    """
+    # Load the ChatCompletionClient from the config
+    component_config = {
+        "provider": "azure_openai_chat_completion_client",
+        "config": llm_config
+    }
+    ai_client = ChatCompletionClient.load_component(component_config)
+
+    # Create a general-purpose assistant
+    assistant = AssistantAgent(
+        name="Assistant",
+        model_client=ai_client,
+        system_message="""
+        You are a helpful AI assistant. You can help with a wide variety of tasks including:
+        - Answering questions
+        - Writing and explaining code
+        - Creative writing
+        - Analysis and research
+        - General conversation
+
+        Be concise, helpful, and friendly. If you're not sure about something, say so.
+        """
+    )
+
+    return assistant

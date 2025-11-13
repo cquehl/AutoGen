@@ -83,7 +83,38 @@ def get_azure_llm_config():
             "multiple_system_messages": True # It supports multiple system prompts
         }
     }
-    
+
     print(f"✅ LLM Config created for Azure deployment: {deployment_name}")
     return llm_config
+
+
+def get_llm_config(provider: str = "azure"):
+    """
+    Returns the LLM configuration for the specified provider.
+
+    Args:
+        provider: One of "azure", "google", or "openai"
+
+    Returns:
+        Dictionary with LLM configuration
+    """
+    if provider.lower() == "azure":
+        return get_azure_llm_config()
+    elif provider.lower() == "google":
+        return get_gemini_llm_config()
+    elif provider.lower() == "openai":
+        # For OpenAI, use similar structure to Azure
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("FATAL: OPENAI_API_KEY not found in .env file.")
+
+        llm_config = {
+            "provider": "openai",
+            "model": "gpt-4",
+            "api_key": api_key,
+        }
+        print("✅ LLM Config created for OpenAI.")
+        return llm_config
+    else:
+        raise ValueError(f"Unknown provider: {provider}. Choose 'azure', 'google', or 'openai'.")
 
