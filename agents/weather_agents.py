@@ -7,6 +7,16 @@ from autogen_core.models import ChatCompletionClient
 from typing import Callable, Awaitable, Optional
 
 from .weather_tool import get_local_forecast
+from .data_tools import (
+    query_database,
+    list_database_tables,
+    describe_database_table,
+    read_file,
+    read_csv,
+    list_directory,
+    write_file,
+    write_csv
+)
 
 def create_weather_agent(model_client: ChatCompletionClient) -> AssistantAgent:
     """
@@ -163,3 +173,110 @@ async def create_simple_assistant(llm_config: dict) -> AssistantAgent:
     )
 
     return assistant
+
+
+def create_data_analyst_agent(model_client: ChatCompletionClient) -> AssistantAgent:
+    """
+    Creates a Data Analyst agent with database and file access tools.
+
+    Args:
+        model_client: ChatCompletionClient instance
+
+    Returns:
+        AssistantAgent configured for data analysis
+    """
+    data_agent = AssistantAgent(
+        name="Data_Analyst",
+        model_client=model_client,
+        tools=[
+            FunctionTool(query_database, description="Execute SQL queries on the database. Can use SELECT, INSERT, UPDATE, DELETE statements."),
+            FunctionTool(list_database_tables, description="List all tables in the database."),
+            FunctionTool(describe_database_table, description="Get schema information for a specific table."),
+            FunctionTool(read_file, description="Read contents of a text file."),
+            FunctionTool(read_csv, description="Read and parse a CSV file into structured data."),
+            FunctionTool(list_directory, description="List files and directories with optional pattern matching."),
+            FunctionTool(write_file, description="Write content to a text file."),
+            FunctionTool(write_csv, description="Write structured data to a CSV file."),
+        ],
+        reflect_on_tool_use=True,
+        system_message="""
+        You are a Data Analyst AI with access to databases and files. You can:
+
+        **Database Operations:**
+        - Query databases using SQL (SELECT, INSERT, UPDATE, DELETE)
+        - List all tables in a database
+        - Describe table schemas
+        - Analyze data and generate insights
+
+        **File Operations:**
+        - Read text files and JSON
+        - Read and parse CSV files
+        - List files in directories
+        - Write results to files or CSVs
+
+        **Your Workflow:**
+        1. When asked about data, first explore what's available (list tables, describe schemas)
+        2. Write clear, efficient SQL queries
+        3. Analyze results and provide insights
+        4. Suggest next steps or additional analysis
+
+        **Best Practices:**
+        - Always validate queries before executing
+        - Limit results for large datasets (use LIMIT clause)
+        - Provide context with your answers
+        - Format data clearly in responses
+        - Save important results to files when appropriate
+
+        Be thorough, accurate, and helpful in your data analysis.
+        """
+    )
+    return data_agent
+
+
+async def create_data_team(llm_config: dict) -> SelectorGroupChat:
+    """
+    Creates a data analysis team with database and file access.
+
+    Args:
+        llm_config: LLM configuration dictionary from config/settings.py
+
+    Returns:
+        SelectorGroupChat team ready for data analysis tasks
+    """
+    # Load the ChatCompletionClient from the config
+    component_config = {
+        "provider": "azure_openai_chat_completion_client",
+        "config": llm_config
+    }
+    ai_client = ChatCompletionClient.load_component(component_config)
+
+    # Create agents
+    data_analyst = create_data_analyst_agent(ai_client)
+    exec_agent = create_exec_agent(ai_client)
+    user_proxy = create_human_user_proxy()
+
+    # Define the selector prompt for routing
+    selector_prompt = """
+    You are orchestrating a conversation between the following agents: {participants}.
+    Given the most recent message from the user or an agent, select the next agent to respond.
+
+    **SELECTION LOGIC:**
+    - If the user asks about data, databases, SQL, files, or CSVs, select "Data_Analyst".
+    - If the Data_Analyst completed a task, select "Executive_Assistant" to summarize results.
+    - If the user provides a new task, select "Executive_Assistant" to coordinate.
+    - The Human_Admin speaks when providing new input.
+
+    Reply with just the agent name and nothing else.
+    """
+
+    # Create the team
+    team = SelectorGroupChat(
+        participants=[data_analyst, exec_agent, user_proxy],
+        model_client=ai_client,
+        termination_condition=TextMentionTermination("TERMINATE"),
+        selector_prompt=selector_prompt,
+        max_turns=15,  # More turns for complex data tasks
+        allow_repeated_speaker=False
+    )
+
+    return team

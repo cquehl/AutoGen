@@ -25,9 +25,14 @@ from rich.prompt import Prompt
 from rich import print as rprint
 
 from config.settings import get_llm_config
-from agents.weather_agents import create_weather_agent_team, create_simple_assistant
+from agents.weather_agents import (
+    create_weather_agent_team,
+    create_simple_assistant,
+    create_data_team
+)
 from autogen_agentchat.ui import Console as AutogenConsole
 from autogen_agentchat.messages import ChatMessage
+from memory_manager import MemoryManager
 
 
 class CLIAgent:
@@ -38,14 +43,22 @@ class CLIAgent:
         team_name: str = "default",
         model_provider: str = "azure",
         save_history: bool = True,
-        verbose: bool = False
+        verbose: bool = False,
+        resume: bool = False
     ):
         self.console = Console()
         self.team_name = team_name
         self.model_provider = model_provider
         self.save_history = save_history
         self.verbose = verbose
+        self.resume = resume
         self.history_file = Path.home() / ".autogen_cli" / "history.jsonl"
+
+        # Initialize memory manager
+        self.memory = MemoryManager(
+            max_memories=100,
+            max_context_memories=10
+        )
 
         # Ensure history directory exists
         if self.save_history:
@@ -53,10 +66,15 @@ class CLIAgent:
 
     def print_banner(self):
         """Display welcome banner."""
-        banner = """
+        session_info = ""
+        if self.resume and self.memory.get_last_session():
+            last = self.memory.get_last_session()
+            session_info = f"\n💾 **Resumed session from {last.start_time.split('T')[0]}**"
+
+        banner = f"""
 # 🤖 AutoGen CLI Agent
 
-Powered by your custom AutoGen backend with Azure OpenAI.
+Powered by your custom AutoGen backend with Azure OpenAI.{session_info}
 Type your message or command. Type 'exit', 'quit', or press Ctrl+C to leave.
 Type '/help' for available commands.
         """
@@ -67,19 +85,33 @@ Type '/help' for available commands.
         help_text = """
 ## Available Commands
 
+**Basic:**
 - `/help` - Show this help message
 - `/clear` - Clear the screen
 - `/history` - Show conversation history
 - `/team [name]` - Switch agent team (weather, simple, custom)
 - `/config` - Show current configuration
 - `/exit` or `exit` - Exit the CLI
-- `TERMINATE` - End the current conversation
+
+**Memory Commands:**
+- `/remember [text]` - Save something to long-term memory
+- `/memories` - Show all stored memories
+- `/search [query]` - Search through memories
+- `/forget [id]` - Delete a specific memory
+- `/clear-memory` - Delete all memories
 
 ## Agent Teams
 
 - **weather** - Multi-agent team with weather, joke, and executive agents
 - **simple** - Single assistant agent for general tasks
+- **data** - Data analyst with database and file access tools
 - **custom** - Define your own agent configuration
+
+## Tips
+
+- Use `-r` or `--resume` when starting to continue with previous context
+- Memories are automatically loaded for context in conversations
+- Use `/remember` to store important information between sessions
 
 Type any message to chat with the agents!
         """
@@ -100,7 +132,17 @@ Type any message to chat with the agents!
 
     async def run_interactive(self):
         """Run the CLI in interactive mode."""
+        # Start session
+        self.memory.start_session(team=self.team_name)
+
+        # Show banner
         self.print_banner()
+
+        # Show loaded context if resuming
+        if self.resume:
+            context_memories = self.memory.get_context_memories()
+            if context_memories:
+                self.console.print(f"[cyan]💭 Loaded {len(context_memories)} memories from previous sessions[/cyan]\n")
 
         # Get LLM configuration
         try:
@@ -117,6 +159,8 @@ Type any message to chat with the agents!
                 team = await create_weather_agent_team(llm_config)
             elif self.team_name == "simple":
                 team = await create_simple_assistant(llm_config)
+            elif self.team_name == "data":
+                team = await create_data_team(llm_config)
             else:
                 team = await create_weather_agent_team(llm_config)  # default
         except Exception as e:
@@ -168,17 +212,87 @@ Type any message to chat with the agents!
                             team = await create_weather_agent_team(llm_config)
                         elif self.team_name == "simple":
                             team = await create_simple_assistant(llm_config)
+                        elif self.team_name == "data":
+                            team = await create_data_team(llm_config)
                         self.console.print("[green]✓ Team switched![/green]")
+                    continue
+
+                # Memory commands
+                if user_input.strip().startswith('/remember'):
+                    text = user_input[10:].strip()  # Remove '/remember '
+                    if text:
+                        memory = self.memory.add_memory(text, importance=8)
+                        self.console.print(f"[green]✓ Saved to memory (ID: {memory.id})[/green]")
+                    else:
+                        self.console.print("[yellow]Usage: /remember [text to remember][/yellow]")
+                    continue
+
+                if user_input.strip() == '/memories':
+                    memories = self.memory.get_memories()
+                    if not memories:
+                        self.console.print("[yellow]No memories stored yet.[/yellow]")
+                    else:
+                        self.console.print(Panel(f"[bold]{len(memories)} Stored Memories[/bold]", border_style="magenta"))
+                        for mem in memories[-20:]:  # Show last 20
+                            date = mem.timestamp.split('T')[0]
+                            self.console.print(f"[dim]{mem.id}[/dim] [{date}] {mem.content[:80]}...")
+                    continue
+
+                if user_input.strip().startswith('/search'):
+                    query = user_input[8:].strip()  # Remove '/search '
+                    if query:
+                        results = self.memory.search_memories(query)
+                        if not results:
+                            self.console.print("[yellow]No matching memories found.[/yellow]")
+                        else:
+                            self.console.print(Panel(f"[bold]Found {len(results)} memories[/bold]", border_style="magenta"))
+                            for mem in results:
+                                date = mem.timestamp.split('T')[0]
+                                self.console.print(f"[dim]{mem.id}[/dim] [{date}] {mem.content}")
+                    else:
+                        self.console.print("[yellow]Usage: /search [query][/yellow]")
+                    continue
+
+                if user_input.strip().startswith('/forget'):
+                    mem_id = user_input[8:].strip()  # Remove '/forget '
+                    if mem_id:
+                        if self.memory.delete_memory(mem_id):
+                            self.console.print(f"[green]✓ Deleted memory {mem_id}[/green]")
+                        else:
+                            self.console.print(f"[red]Memory {mem_id} not found[/red]")
+                    else:
+                        self.console.print("[yellow]Usage: /forget [memory_id][/yellow]")
+                    continue
+
+                if user_input.strip() == '/clear-memory':
+                    confirm = await loop.run_in_executor(
+                        None,
+                        Prompt.ask,
+                        "[yellow]Delete ALL memories? (yes/no)[/yellow]"
+                    )
+                    if confirm.lower() == 'yes':
+                        self.memory.clear_all_memories()
+                        self.console.print("[green]✓ All memories cleared[/green]")
+                    else:
+                        self.console.print("[yellow]Cancelled[/yellow]")
                     continue
 
                 # Save to history
                 if self.save_history:
                     self._save_to_history("user", user_input)
 
+                # Increment message count
+                self.memory.increment_message_count()
+
                 # Process with agents
                 self.console.print()  # blank line
 
                 try:
+                    # Inject memory context if resuming
+                    context_prefix = ""
+                    if self.resume:
+                        context_prefix = self.memory.format_memories_for_context()
+
                     # Use the existing Console for streaming output
                     await AutogenConsole(team.run_stream(task=user_input))
                 except Exception as e:
@@ -213,6 +327,8 @@ Type any message to chat with the agents!
             team = await create_weather_agent_team(llm_config)
         elif self.team_name == "simple":
             team = await create_simple_assistant(llm_config)
+        elif self.team_name == "data":
+            team = await create_data_team(llm_config)
         else:
             team = await create_weather_agent_team(llm_config)
 
@@ -286,7 +402,7 @@ def main():
         '--team',
         '-t',
         default='weather',
-        choices=['weather', 'simple', 'custom'],
+        choices=['weather', 'simple', 'data', 'custom'],
         help='Agent team to use (default: weather)'
     )
 
@@ -318,6 +434,13 @@ def main():
     )
 
     parser.add_argument(
+        '--resume',
+        '-r',
+        action='store_true',
+        help='Resume with previous session context'
+    )
+
+    parser.add_argument(
         '--version',
         action='version',
         version='AutoGen CLI Agent 1.0.0'
@@ -330,7 +453,8 @@ def main():
         team_name=args.team,
         model_provider=args.provider,
         save_history=not args.no_history,
-        verbose=args.verbose
+        verbose=args.verbose,
+        resume=args.resume
     )
 
     # Show history if requested
