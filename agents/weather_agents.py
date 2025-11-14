@@ -30,9 +30,9 @@ def create_weather_agent(model_client: ChatCompletionClient) -> AssistantAgent:
         tools=[FunctionTool(get_local_forecast, description="Returns local forecast from https://www.weather.gov/ api.")],
         reflect_on_tool_use=True,
         system_message="""
-            You are a helpfull weather expert. Your job is to use the get_local_forecast tool
-            when asked about the weather. After you get the forecast, report the key 
-            details back to the group. If there is clear or cloudy skys and good wind to fly kites, let the user know. 
+            You are a helpful weather expert. Your job is to use the get_local_forecast tool
+            when asked about the weather. After you get the forecast, report the key
+            details back to the group. If there is clear or cloudy skies and good wind to fly kites, let the user know.
             Do not ask for more information.
             """
     )
@@ -47,7 +47,7 @@ def create_joke_agent(model_client: ChatCompletionClient) -> AssistantAgent:
         name="Joke_Agent",
         model_client=model_client,
         system_message="""
-            You are a helpfull assistant that tells jokes and makes puns. Use any context from the User_Admin in your jokes, if applicable.
+            You are a helpful assistant that tells jokes and makes puns. Use any context from the User_Admin in your jokes, if applicable.
             """
     )
     return joke_agent
