@@ -40,6 +40,12 @@ typing_extensions==4.14.1
 urllib3==2.5.0
 zipp==3.23.0
 
+# Database
+sqlalchemy==2.0.36
+aiosqlite==0.20.0  # Async SQLite support
+asyncpg==0.30.0    # Async PostgreSQL support (optional)
+aiomysql==0.2.0    # Async MySQL support (optional)
+
 # Testing
 pytest==8.3.4
 pytest-asyncio==0.24.0

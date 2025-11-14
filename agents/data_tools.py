@@ -18,6 +18,9 @@ from typing import List, Dict, Any, Optional
 import sqlite3
 import re
 from enum import Enum
+from sqlalchemy import create_engine, text, pool
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
+import asyncio
 
 
 # Security: Allowed directories for file operations
@@ -29,6 +32,15 @@ ALLOWED_FILE_DIRECTORIES = [
 
 # Security: Maximum query execution time (seconds)
 QUERY_TIMEOUT = 30
+
+# Connection Pool Configuration
+POOL_SIZE = 5           # Number of connections to maintain
+MAX_OVERFLOW = 10       # Additional connections beyond pool_size
+POOL_TIMEOUT = 30       # Timeout for getting connection from pool
+POOL_RECYCLE = 3600     # Recycle connections after 1 hour
+
+# Global connection pool cache
+_connection_pools: Dict[str, AsyncEngine] = {}
 
 # Security: Query validation patterns
 class QueryType(Enum):
@@ -138,6 +150,65 @@ def _validate_file_path(file_path: str, operation: str = "read") -> tuple[bool, 
 
     except Exception as e:
         return False, f"Invalid file path: {str(e)}", None
+
+
+def _convert_to_async_url(connection_string: str) -> str:
+    """
+    Convert standard database URL to async version.
+
+    Args:
+        connection_string: Standard database URL
+
+    Returns:
+        Async-compatible database URL
+    """
+    if connection_string.startswith("sqlite:///"):
+        # SQLite: sqlite:/// -> sqlite+aiosqlite:///
+        return connection_string.replace("sqlite:///", "sqlite+aiosqlite:///")
+    elif connection_string.startswith("postgresql://"):
+        # PostgreSQL: postgresql:// -> postgresql+asyncpg://
+        return connection_string.replace("postgresql://", "postgresql+asyncpg://")
+    elif connection_string.startswith("mysql://"):
+        # MySQL: mysql:// -> mysql+aiomysql://
+        return connection_string.replace("mysql://", "mysql+aiomysql://")
+    else:
+        raise ValueError(f"Unsupported database type: {connection_string}")
+
+
+async def _get_connection_pool(connection_string: str) -> AsyncEngine:
+    """
+    Get or create a connection pool for the given database.
+
+    Uses caching to reuse pools across multiple queries.
+
+    Args:
+        connection_string: Database connection string
+
+    Returns:
+        SQLAlchemy AsyncEngine with connection pooling
+    """
+    # Check if pool already exists
+    if connection_string in _connection_pools:
+        return _connection_pools[connection_string]
+
+    # Convert to async URL
+    async_url = _convert_to_async_url(connection_string)
+
+    # Create async engine with connection pooling
+    engine = create_async_engine(
+        async_url,
+        poolclass=pool.QueuePool,
+        pool_size=POOL_SIZE,
+        max_overflow=MAX_OVERFLOW,
+        pool_timeout=POOL_TIMEOUT,
+        pool_recycle=POOL_RECYCLE,
+        echo=False,  # Set to True for SQL debugging
+    )
+
+    # Cache the pool
+    _connection_pools[connection_string] = engine
+
+    return engine
 
 
 class DatabaseTool:
@@ -355,7 +426,7 @@ async def query_database(
     params: tuple = None
 ) -> dict:
     """
-    Execute a SQL query on the configured database.
+    Execute a SQL query on the configured database with connection pooling.
 
     Args:
         query: SQL query to execute
@@ -368,15 +439,74 @@ async def query_database(
     Example:
         await query_database("SELECT * FROM users WHERE age > ?", params=(25,))
     """
-    db = DatabaseTool(connection_string)
-    result = db.execute_query(query, params)
-    db.close()
-    return result
+    # Security: Validate query before execution
+    is_valid, error_msg, query_type = _validate_sql_query(query)
+    if not is_valid:
+        return {
+            "success": False,
+            "error": f"Query validation failed: {error_msg}",
+            "query": query[:100]
+        }
+
+    try:
+        # Get connection string from environment if not provided
+        conn_str = connection_string or os.getenv("DATABASE_URL")
+        if not conn_str:
+            return {"success": False, "error": "No database connection string provided"}
+
+        # Get connection pool
+        engine = await _get_connection_pool(conn_str)
+
+        # Execute query with timeout
+        async with asyncio.timeout(QUERY_TIMEOUT):
+            async with engine.begin() as conn:
+                # Convert params to dict for SQLAlchemy if needed
+                if params:
+                    # SQLAlchemy uses :param syntax, but we'll use positional
+                    result = await conn.execute(text(query), params if isinstance(params, dict) else {})
+                else:
+                    result = await conn.execute(text(query))
+
+                if query_type == QueryType.SELECT:
+                    # Fetch results
+                    rows = result.fetchall()
+                    # Convert to list of dicts
+                    results = [dict(row._mapping) for row in rows]
+
+                    return {
+                        "success": True,
+                        "row_count": len(results),
+                        "results": results
+                    }
+                else:
+                    # For INSERT, UPDATE, DELETE
+                    # Log DELETE operations
+                    if query_type == QueryType.DELETE:
+                        print(f"⚠️  DELETE operation executed: affected {result.rowcount} rows")
+
+                    return {
+                        "success": True,
+                        "affected_rows": result.rowcount,
+                        "message": f"{query_type.value} completed successfully"
+                    }
+
+    except asyncio.TimeoutError:
+        return {
+            "success": False,
+            "error": f"Query timed out after {QUERY_TIMEOUT} seconds",
+            "query": query[:100]
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "query": query[:100]
+        }
 
 
 async def list_database_tables(connection_string: str = None) -> dict:
     """
-    List all tables in the database.
+    List all tables in the database using connection pooling.
 
     Args:
         connection_string: Optional database connection string
@@ -384,16 +514,38 @@ async def list_database_tables(connection_string: str = None) -> dict:
     Returns:
         Dictionary with list of table names
     """
-    db = DatabaseTool(connection_string)
-    db.connect()
-    tables = db.list_tables()
-    db.close()
-    return {"tables": tables, "count": len(tables)}
+    try:
+        # Get connection string from environment if not provided
+        conn_str = connection_string or os.getenv("DATABASE_URL")
+        if not conn_str:
+            return {"success": False, "error": "No database connection string provided"}
+
+        # Determine database type
+        if "sqlite" in conn_str:
+            query = "SELECT name FROM sqlite_master WHERE type='table'"
+        elif "postgresql" in conn_str:
+            query = "SELECT tablename FROM pg_tables WHERE schemaname='public'"
+        elif "mysql" in conn_str:
+            query = "SHOW TABLES"
+        else:
+            return {"success": False, "error": "Unsupported database type"}
+
+        # Use query_database to leverage connection pooling
+        result = await query_database(query, conn_str)
+
+        if result.get("success"):
+            tables = [list(row.values())[0] for row in result["results"]]
+            return {"success": True, "tables": tables, "count": len(tables)}
+        else:
+            return result
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 async def describe_database_table(table_name: str, connection_string: str = None) -> dict:
     """
-    Get schema information for a database table.
+    Get schema information for a database table using connection pooling.
 
     Args:
         table_name: Name of the table to describe
@@ -402,11 +554,36 @@ async def describe_database_table(table_name: str, connection_string: str = None
     Returns:
         Table schema information
     """
-    db = DatabaseTool(connection_string)
-    db.connect()
-    schema = db.describe_table(table_name)
-    db.close()
-    return {"table": table_name, "schema": schema}
+    try:
+        # Get connection string from environment if not provided
+        conn_str = connection_string or os.getenv("DATABASE_URL")
+        if not conn_str:
+            return {"success": False, "error": "No database connection string provided"}
+
+        # Determine database type and build query
+        if "sqlite" in conn_str:
+            query = f"PRAGMA table_info({table_name})"
+        elif "postgresql" in conn_str:
+            query = f"""
+                SELECT column_name, data_type, is_nullable
+                FROM information_schema.columns
+                WHERE table_name = '{table_name}'
+            """
+        elif "mysql" in conn_str:
+            query = f"DESCRIBE {table_name}"
+        else:
+            return {"success": False, "error": "Unsupported database type"}
+
+        # Use query_database to leverage connection pooling
+        result = await query_database(query, conn_str)
+
+        if result.get("success"):
+            return {"success": True, "table": table_name, "schema": result["results"]}
+        else:
+            return result
+
+    except Exception as e:
+        return {"success": False, "error": str(e), "table": table_name}
 
 
 async def read_file(file_path: str, encoding: str = "utf-8") -> dict:
