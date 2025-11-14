@@ -22,6 +22,7 @@ from rich.markdown import Markdown
 from rich.live import Live
 from rich.spinner import Spinner
 from rich.prompt import Prompt
+from rich.status import Status
 from rich import print as rprint
 
 from config.settings import get_llm_config
@@ -66,7 +67,7 @@ class CLIAgent:
         if self.save_history:
             self.history_file.parent.mkdir(parents=True, exist_ok=True)
 
-    def print_banner(self):
+    def print_banner(self) -> None:
         """Display welcome banner."""
         session_info = ""
         if self.resume and self.memory.get_last_session():
@@ -82,7 +83,7 @@ Type '/help' for available commands.
         """
         self.console.print(Panel(Markdown(banner), border_style="blue"))
 
-    def print_help(self):
+    def print_help(self) -> None:
         """Show help message."""
         help_text = """
 ## Available Commands
@@ -121,7 +122,7 @@ Type any message to chat with the agents!
         """
         self.console.print(Panel(Markdown(help_text), title="Help", border_style="green"))
 
-    def print_config(self, config: dict):
+    def print_config(self, config: dict) -> None:
         """Display current configuration."""
         config_text = f"""
 ## Current Configuration
@@ -155,27 +156,30 @@ Type any message to chat with the agents!
             self.console.print(f"[red]Error loading configuration: {e}[/red]")
             return
 
-        # Create agent team
-        self.console.print(f"[cyan]Initializing {self.team_name} agent team...[/cyan]")
-
+        # Create agent team with loading indicator
         try:
-            if self.team_name == "weather":
-                team = await create_weather_agent_team(llm_config)
-            elif self.team_name == "simple":
-                team = await create_simple_assistant(llm_config)
-            elif self.team_name == "data":
-                team = await create_data_team(llm_config)
-            elif self.team_name == "design":
-                team = await create_design_team(llm_config)
-            elif self.team_name == "magentic":
-                team = await create_magentic_team(llm_config)
-            else:
-                team = await create_weather_agent_team(llm_config)  # default
+            with self.console.status(
+                f"[cyan]Initializing {self.team_name} agent team...[/cyan]",
+                spinner="dots"
+            ):
+                if self.team_name == "weather":
+                    team = await create_weather_agent_team(llm_config)
+                elif self.team_name == "simple":
+                    team = await create_simple_assistant(llm_config)
+                elif self.team_name == "data":
+                    team = await create_data_team(llm_config)
+                elif self.team_name == "design":
+                    team = await create_design_team(llm_config)
+                elif self.team_name == "magentic":
+                    team = await create_magentic_team(llm_config)
+                else:
+                    team = await create_weather_agent_team(llm_config)  # default
+
+            self.console.print("[green]✓ Agents ready![/green]\n")
+
         except Exception as e:
             self.console.print(f"[red]Error creating agent team: {e}[/red]")
             return
-
-        self.console.print("[green]✓ Agents ready![/green]\n")
 
         # Main interaction loop
         loop = asyncio.get_event_loop()
@@ -301,12 +305,15 @@ Type any message to chat with the agents!
 
                 try:
                     # Inject memory context if resuming
-                    context_prefix = ""
+                    task_with_context = user_input
                     if self.resume:
-                        context_prefix = self.memory.format_memories_for_context()
+                        context = self.memory.format_memories_for_context()
+                        if context:
+                            # Prepend context to user message
+                            task_with_context = f"{context}\n\n**Current Request:**\n{user_input}"
 
                     # Use the existing Console for streaming output
-                    await AutogenConsole(team.run_stream(task=user_input))
+                    await AutogenConsole(team.run_stream(task=task_with_context))
                 except Exception as e:
                     self.console.print(f"[red]Error during agent execution: {e}[/red]")
                     if self.verbose:
@@ -334,34 +341,49 @@ Type any message to chat with the agents!
             self.console.print(f"[red]Error loading configuration: {e}[/red]")
             return
 
-        # Create agent team
-        if self.team_name == "weather":
-            team = await create_weather_agent_team(llm_config)
-        elif self.team_name == "simple":
-            team = await create_simple_assistant(llm_config)
-        elif self.team_name == "data":
-            team = await create_data_team(llm_config)
-        elif self.team_name == "design":
-            team = await create_design_team(llm_config)
-        elif self.team_name == "magentic":
-            team = await create_magentic_team(llm_config)
-        else:
-            team = await create_weather_agent_team(llm_config)
+        # Create agent team with loading indicator
+        with self.console.status(
+            f"[cyan]Initializing {self.team_name} team...[/cyan]",
+            spinner="dots"
+        ):
+            if self.team_name == "weather":
+                team = await create_weather_agent_team(llm_config)
+            elif self.team_name == "simple":
+                team = await create_simple_assistant(llm_config)
+            elif self.team_name == "data":
+                team = await create_data_team(llm_config)
+            elif self.team_name == "design":
+                team = await create_design_team(llm_config)
+            elif self.team_name == "magentic":
+                team = await create_magentic_team(llm_config)
+            else:
+                team = await create_weather_agent_team(llm_config)
 
         # Run query
         self.console.print(f"[bold blue]Query:[/bold blue] {query}\n")
 
+        # Inject memory context if resuming
+        task_with_context = query
+        if self.resume:
+            context = self.memory.format_memories_for_context()
+            if context:
+                task_with_context = f"{context}\n\n**Current Request:**\n{query}"
+                self.console.print("[cyan]💭 Loaded context from previous sessions[/cyan]\n")
+
         try:
-            await AutogenConsole(team.run_stream(task=query))
+            await AutogenConsole(team.run_stream(task=task_with_context))
         except Exception as e:
             self.console.print(f"[red]Error: {e}[/red]")
             if self.verbose:
                 import traceback
                 self.console.print(f"[red]{traceback.format_exc()}[/red]")
 
-    def _save_to_history(self, role: str, content: str):
-        """Save message to history file."""
+    def _save_to_history(self, role: str, content: str) -> None:
+        """Save message to history file with rotation."""
         import json
+
+        # Rotate history if file is too large (>10MB)
+        self._rotate_history_if_needed()
 
         entry = {
             "timestamp": datetime.now().isoformat(),
@@ -372,6 +394,26 @@ Type any message to chat with the agents!
 
         with open(self.history_file, 'a') as f:
             f.write(json.dumps(entry) + '\n')
+
+    def _rotate_history_if_needed(self, max_size_mb: int = 10) -> None:
+        """Rotate history file if it exceeds max size."""
+        if not self.history_file.exists():
+            return
+
+        # Check file size
+        size_mb = self.history_file.stat().st_size / (1024 * 1024)
+
+        if size_mb > max_size_mb:
+            # Rotate: rename current file with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_file = self.history_file.parent / f"history_{timestamp}.jsonl"
+            self.history_file.rename(backup_file)
+
+            # Keep only last 5 backup files
+            backup_files = sorted(self.history_file.parent.glob("history_*.jsonl"))
+            if len(backup_files) > 5:
+                for old_file in backup_files[:-5]:
+                    old_file.unlink()
 
     def show_history(self, limit: int = 20):
         """Display conversation history."""

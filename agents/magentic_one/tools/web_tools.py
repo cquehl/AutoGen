@@ -6,6 +6,7 @@ Provides async web navigation, content extraction, and search capabilities.
 
 import asyncio
 import httpx
+import ipaddress
 from typing import Dict, List, Optional, Any
 from urllib.parse import urljoin, urlparse
 import re
@@ -15,6 +16,68 @@ import json
 
 # Simple in-memory cache to avoid repeated requests
 _page_cache = {}
+
+# Security: Blocked URL schemes to prevent SSRF
+BLOCKED_SCHEMES = {'file', 'ftp', 'ftps', 'data', 'javascript', 'vbscript'}
+
+# Security: Blocked IP ranges (private networks, localhost)
+BLOCKED_IP_RANGES = [
+    ipaddress.ip_network('127.0.0.0/8'),      # Localhost
+    ipaddress.ip_network('10.0.0.0/8'),       # Private
+    ipaddress.ip_network('172.16.0.0/12'),    # Private
+    ipaddress.ip_network('192.168.0.0/16'),   # Private
+    ipaddress.ip_network('169.254.0.0/16'),   # Link-local
+    ipaddress.ip_network('::1/128'),          # IPv6 localhost
+    ipaddress.ip_network('fc00::/7'),         # IPv6 private
+    ipaddress.ip_network('fe80::/10'),        # IPv6 link-local
+]
+
+
+def _validate_url(url: str) -> tuple[bool, Optional[str]]:
+    """
+    Validate URL to prevent SSRF attacks.
+
+    Returns:
+        (is_valid, error_message) tuple
+    """
+    try:
+        parsed = urlparse(url)
+
+        # Check scheme
+        if parsed.scheme.lower() in BLOCKED_SCHEMES:
+            return False, f"Blocked URL scheme: {parsed.scheme}"
+
+        # Only allow http and https
+        if parsed.scheme.lower() not in ('http', 'https'):
+            return False, f"Only http and https schemes allowed, got: {parsed.scheme}"
+
+        # Check for IP addresses
+        hostname = parsed.hostname
+        if not hostname:
+            return False, "URL must have a hostname"
+
+        # Try to parse as IP address
+        try:
+            ip = ipaddress.ip_address(hostname)
+
+            # Check if IP is in blocked ranges
+            for blocked_range in BLOCKED_IP_RANGES:
+                if ip in blocked_range:
+                    return False, f"Access to private/internal IPs is blocked: {hostname}"
+
+        except ValueError:
+            # Not an IP address, it's a domain name - that's fine
+            pass
+
+        # Block localhost variations
+        if hostname.lower() in ('localhost', 'localhost.localdomain'):
+            return False, "Access to localhost is blocked"
+
+        # All checks passed
+        return True, None
+
+    except Exception as e:
+        return False, f"Invalid URL: {str(e)}"
 
 
 async def navigate_to_url(url: str, use_cache: bool = True) -> Dict[str, Any]:
@@ -34,6 +97,15 @@ async def navigate_to_url(url: str, use_cache: bool = True) -> Dict[str, Any]:
             print(result["content"])
     """
     try:
+        # Security: Validate URL to prevent SSRF
+        is_valid, error_msg = _validate_url(url)
+        if not is_valid:
+            return {
+                "success": False,
+                "error": f"URL validation failed: {error_msg}",
+                "url": url
+            }
+
         # Check cache
         if use_cache and url in _page_cache:
             return _page_cache[url]
