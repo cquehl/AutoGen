@@ -2,6 +2,12 @@
 Data Access Tools for AutoGen CLI Agent
 
 Provides database connectivity, file reading, and CSV parsing capabilities.
+
+Security Features:
+- SQL query validation and whitelisting
+- Path traversal protection
+- Database connection pooling
+- Query timeouts
 """
 
 import os
@@ -10,6 +16,128 @@ import csv
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import sqlite3
+import re
+from enum import Enum
+
+
+# Security: Allowed directories for file operations
+ALLOWED_FILE_DIRECTORIES = [
+    Path.cwd(),  # Current working directory
+    Path.home() / "agent_output",  # Safe output directory
+    Path.home() / "data",  # Data directory
+]
+
+# Security: Maximum query execution time (seconds)
+QUERY_TIMEOUT = 30
+
+# Security: Query validation patterns
+class QueryType(Enum):
+    SELECT = "SELECT"
+    INSERT = "INSERT"
+    UPDATE = "UPDATE"
+    DELETE = "DELETE"  # Allowed but logged
+    UNKNOWN = "UNKNOWN"
+
+
+def _validate_sql_query(query: str) -> tuple[bool, Optional[str], QueryType]:
+    """
+    Validate SQL query to prevent SQL injection and dangerous operations.
+
+    Returns:
+        (is_valid, error_message, query_type) tuple
+    """
+    query_upper = query.strip().upper()
+
+    # Determine query type
+    if query_upper.startswith("SELECT"):
+        query_type = QueryType.SELECT
+    elif query_upper.startswith("INSERT"):
+        query_type = QueryType.INSERT
+    elif query_upper.startswith("UPDATE"):
+        query_type = QueryType.UPDATE
+    elif query_upper.startswith("DELETE"):
+        query_type = QueryType.DELETE
+    else:
+        return False, "Only SELECT, INSERT, UPDATE, DELETE queries allowed", QueryType.UNKNOWN
+
+    # Block dangerous SQL commands
+    dangerous_patterns = [
+        r'\bDROP\b',
+        r'\bTRUNCATE\b',
+        r'\bALTER\b',
+        r'\bCREATE\b',
+        r'\bEXEC\b',
+        r'\bEXECUTE\b',
+        r'--',  # SQL comments can hide malicious code
+        r'/\*',  # Block comment
+        r'\bSHUTDOWN\b',
+        r'\bGRANT\b',
+        r'\bREVOKE\b',
+    ]
+
+    for pattern in dangerous_patterns:
+        if re.search(pattern, query_upper):
+            return False, f"Query contains blocked SQL command: {pattern}", query_type
+
+    # Block multiple statements (prevents query chaining)
+    if ';' in query and not query.strip().endswith(';'):
+        return False, "Multiple SQL statements not allowed", query_type
+
+    return True, None, query_type
+
+
+def _validate_file_path(file_path: str, operation: str = "read") -> tuple[bool, Optional[str], Optional[Path]]:
+    """
+    Validate file path to prevent path traversal attacks.
+
+    Args:
+        file_path: Path to validate
+        operation: "read" or "write"
+
+    Returns:
+        (is_valid, error_message, resolved_path) tuple
+    """
+    try:
+        path = Path(file_path).expanduser().resolve()
+
+        # Check if path is within allowed directories
+        allowed = False
+        for allowed_dir in ALLOWED_FILE_DIRECTORIES:
+            allowed_dir = allowed_dir.resolve()
+            try:
+                path.relative_to(allowed_dir)
+                allowed = True
+                break
+            except ValueError:
+                continue
+
+        if not allowed:
+            allowed_str = ", ".join(str(d) for d in ALLOWED_FILE_DIRECTORIES)
+            return False, f"Access denied. File must be within allowed directories: {allowed_str}", None
+
+        # Additional checks for read operations
+        if operation == "read":
+            # Block sensitive files
+            sensitive_patterns = [
+                r'\.ssh',
+                r'\.aws',
+                r'\.env',
+                r'id_rsa',
+                r'password',
+                r'secret',
+                r'/etc/',
+                r'\.key$',
+            ]
+
+            path_str = str(path).lower()
+            for pattern in sensitive_patterns:
+                if re.search(pattern, path_str):
+                    return False, f"Access to sensitive files blocked: {pattern}", None
+
+        return True, None, path
+
+    except Exception as e:
+        return False, f"Invalid file path: {str(e)}", None
 
 
 class DatabaseTool:
@@ -81,7 +209,7 @@ class DatabaseTool:
 
     def execute_query(self, query: str, params: tuple = None) -> Dict[str, Any]:
         """
-        Execute a SQL query.
+        Execute a SQL query with security validation.
 
         Args:
             query: SQL query string
@@ -90,6 +218,15 @@ class DatabaseTool:
         Returns:
             Dictionary with results or error info
         """
+        # Security: Validate query before execution
+        is_valid, error_msg, query_type = _validate_sql_query(query)
+        if not is_valid:
+            return {
+                "success": False,
+                "error": f"Query validation failed: {error_msg}",
+                "query": query[:100]  # Only return first 100 chars for security
+            }
+
         if not self.conn:
             if not self.connect():
                 return {"error": "Failed to connect to database"}
@@ -97,15 +234,19 @@ class DatabaseTool:
         try:
             cursor = self.conn.cursor()
 
+            # Set query timeout for SQLite
+            if self.db_type == "sqlite":
+                self.conn.execute(f"PRAGMA busy_timeout = {QUERY_TIMEOUT * 1000}")
+
             if params:
                 cursor.execute(query, params)
             else:
                 cursor.execute(query)
 
             # Determine if this is a SELECT query or modification
-            query_type = query.strip().upper().split()[0]
+            query_type_str = query_type.value
 
-            if query_type == "SELECT":
+            if query_type == QueryType.SELECT:
                 # Fetch all results
                 if self.db_type == "sqlite":
                     rows = cursor.fetchall()
@@ -125,10 +266,15 @@ class DatabaseTool:
             else:
                 # For INSERT, UPDATE, DELETE
                 self.conn.commit()
+
+                # Log DELETE operations for audit
+                if query_type == QueryType.DELETE:
+                    print(f"⚠️  DELETE operation executed: affected {cursor.rowcount} rows")
+
                 return {
                     "success": True,
                     "affected_rows": cursor.rowcount,
-                    "message": f"{query_type} completed successfully"
+                    "message": f"{query_type_str} completed successfully"
                 }
 
         except Exception as e:
@@ -265,7 +411,7 @@ async def describe_database_table(table_name: str, connection_string: str = None
 
 async def read_file(file_path: str, encoding: str = "utf-8") -> dict:
     """
-    Read contents of a text file.
+    Read contents of a text file with path traversal protection.
 
     Args:
         file_path: Path to the file
@@ -278,7 +424,10 @@ async def read_file(file_path: str, encoding: str = "utf-8") -> dict:
         await read_file("/path/to/config.json")
     """
     try:
-        path = Path(file_path).expanduser()
+        # Security: Validate file path
+        is_valid, error_msg, path = _validate_file_path(file_path, operation="read")
+        if not is_valid:
+            return {"success": False, "error": error_msg, "file_path": file_path}
 
         if not path.exists():
             return {"error": f"File not found: {file_path}"}
@@ -302,7 +451,7 @@ async def read_file(file_path: str, encoding: str = "utf-8") -> dict:
 
 async def read_csv(file_path: str, max_rows: int = 1000) -> dict:
     """
-    Read and parse a CSV file.
+    Read and parse a CSV file with path validation.
 
     Args:
         file_path: Path to the CSV file
@@ -315,7 +464,10 @@ async def read_csv(file_path: str, max_rows: int = 1000) -> dict:
         await read_csv("/path/to/data.csv", max_rows=100)
     """
     try:
-        path = Path(file_path).expanduser()
+        # Security: Validate file path
+        is_valid, error_msg, path = _validate_file_path(file_path, operation="read")
+        if not is_valid:
+            return {"success": False, "error": error_msg, "file_path": file_path}
 
         if not path.exists():
             return {"error": f"File not found: {file_path}"}
@@ -397,7 +549,7 @@ async def list_directory(directory_path: str, pattern: str = "*") -> dict:
 
 async def write_file(file_path: str, content: str, overwrite: bool = False) -> dict:
     """
-    Write content to a file.
+    Write content to a file with path validation and safe permissions.
 
     Args:
         file_path: Path to the file
@@ -411,7 +563,10 @@ async def write_file(file_path: str, content: str, overwrite: bool = False) -> d
         await write_file("/path/to/output.txt", "Hello World", overwrite=True)
     """
     try:
-        path = Path(file_path).expanduser()
+        # Security: Validate file path
+        is_valid, error_msg, path = _validate_file_path(file_path, operation="write")
+        if not is_valid:
+            return {"success": False, "error": error_msg, "file_path": file_path}
 
         if path.exists() and not overwrite:
             return {
@@ -419,10 +574,12 @@ async def write_file(file_path: str, content: str, overwrite: bool = False) -> d
                 "file_path": str(path)
             }
 
-        # Create parent directories if needed
-        path.parent.mkdir(parents=True, exist_ok=True)
+        # Create parent directories with safe permissions
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
 
+        # Write file with safe permissions
         path.write_text(content, encoding='utf-8')
+        path.chmod(0o600)  # Owner read/write only
 
         return {
             "success": True,
@@ -436,7 +593,7 @@ async def write_file(file_path: str, content: str, overwrite: bool = False) -> d
 
 async def write_csv(file_path: str, data: List[Dict[str, Any]], overwrite: bool = False) -> dict:
     """
-    Write data to a CSV file.
+    Write data to a CSV file with path validation.
 
     Args:
         file_path: Path to the CSV file
@@ -453,7 +610,10 @@ async def write_csv(file_path: str, data: List[Dict[str, Any]], overwrite: bool 
         ])
     """
     try:
-        path = Path(file_path).expanduser()
+        # Security: Validate file path
+        is_valid, error_msg, path = _validate_file_path(file_path, operation="write")
+        if not is_valid:
+            return {"success": False, "error": error_msg, "file_path": file_path}
 
         if path.exists() and not overwrite:
             return {
@@ -464,8 +624,8 @@ async def write_csv(file_path: str, data: List[Dict[str, Any]], overwrite: bool 
         if not data:
             return {"error": "No data provided"}
 
-        # Create parent directories if needed
-        path.parent.mkdir(parents=True, exist_ok=True)
+        # Create parent directories with safe permissions
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
 
         # Get headers from first row
         headers = list(data[0].keys())
@@ -474,6 +634,9 @@ async def write_csv(file_path: str, data: List[Dict[str, Any]], overwrite: bool 
             writer = csv.DictWriter(f, fieldnames=headers)
             writer.writeheader()
             writer.writerows(data)
+
+        # Set safe file permissions
+        path.chmod(0o600)
 
         return {
             "success": True,

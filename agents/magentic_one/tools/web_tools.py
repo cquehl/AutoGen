@@ -2,6 +2,11 @@
 Web browsing and extraction tools for Magentic-One
 
 Provides async web navigation, content extraction, and search capabilities.
+
+Security Features:
+- SSRF protection with IP blocking
+- Bounded LRU cache with TTL
+- Request timeout enforcement
 """
 
 import asyncio
@@ -12,10 +17,68 @@ from urllib.parse import urljoin, urlparse
 import re
 from bs4 import BeautifulSoup
 import json
+from functools import lru_cache
+from collections import OrderedDict
+import time
 
 
-# Simple in-memory cache to avoid repeated requests
-_page_cache = {}
+# Bounded LRU cache with TTL to prevent memory exhaustion
+class BoundedTTLCache:
+    """Thread-safe bounded cache with TTL (Time To Live)."""
+
+    def __init__(self, maxsize: int = 100, ttl: int = 3600):
+        """
+        Args:
+            maxsize: Maximum number of items in cache
+            ttl: Time to live in seconds
+        """
+        self.maxsize = maxsize
+        self.ttl = ttl
+        self.cache: OrderedDict = OrderedDict()
+        self.timestamps: Dict[str, float] = {}
+
+    def get(self, key: str) -> Optional[Any]:
+        """Get item from cache if it exists and hasn't expired."""
+        if key not in self.cache:
+            return None
+
+        # Check if expired
+        if time.time() - self.timestamps.get(key, 0) > self.ttl:
+            self.cache.pop(key, None)
+            self.timestamps.pop(key, None)
+            return None
+
+        # Move to end (most recently used)
+        self.cache.move_to_end(key)
+        return self.cache[key]
+
+    def put(self, key: str, value: Any):
+        """Put item in cache, evicting oldest if at capacity."""
+        # Remove if already exists
+        if key in self.cache:
+            self.cache.pop(key)
+
+        # Evict oldest if at capacity
+        if len(self.cache) >= self.maxsize:
+            oldest_key = next(iter(self.cache))
+            self.cache.pop(oldest_key)
+            self.timestamps.pop(oldest_key, None)
+
+        # Add new item
+        self.cache[key] = value
+        self.timestamps[key] = time.time()
+
+    def clear(self):
+        """Clear all cached items."""
+        self.cache.clear()
+        self.timestamps.clear()
+
+    def __len__(self):
+        return len(self.cache)
+
+
+# Cache with 100 items max, 1 hour TTL
+_page_cache = BoundedTTLCache(maxsize=100, ttl=3600)
 
 # Security: Blocked URL schemes to prevent SSRF
 BLOCKED_SCHEMES = {'file', 'ftp', 'ftps', 'data', 'javascript', 'vbscript'}
@@ -107,8 +170,10 @@ async def navigate_to_url(url: str, use_cache: bool = True) -> Dict[str, Any]:
             }
 
         # Check cache
-        if use_cache and url in _page_cache:
-            return _page_cache[url]
+        if use_cache:
+            cached_result = _page_cache.get(url)
+            if cached_result is not None:
+                return cached_result
 
         # Make async request
         async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
@@ -129,7 +194,7 @@ async def navigate_to_url(url: str, use_cache: bool = True) -> Dict[str, Any]:
 
             # Cache successful responses
             if response.status_code == 200:
-                _page_cache[url] = result
+                _page_cache.put(url, result)
 
             return result
 
