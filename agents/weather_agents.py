@@ -17,6 +17,7 @@ from .data_tools import (
     write_file,
     write_csv
 )
+from .magentic_one.team import create_magentic_team
 
 def create_weather_agent(model_client: ChatCompletionClient) -> AssistantAgent:
     """
