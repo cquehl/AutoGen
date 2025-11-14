@@ -31,7 +31,10 @@ from agents.weather_agents import (
     create_simple_assistant,
     create_data_team,
     create_design_team,
-    create_magentic_team
+    create_magentic_team,
+    create_dev_team,
+    create_quick_coder,
+    create_full_dev_team,
 )
 from autogen_agentchat.ui import Console as AutogenConsole
 from autogen_agentchat.messages import ChatMessage
@@ -110,7 +113,9 @@ Type '/help' for available commands.
 - **data** - Data analyst with database and file access tools
 - **design** - UX Director, AI Expert, Principal Engineer for system design
 - **magentic** - Web research with Orchestrator, WebSurfer, FileWriter
-- **custom** - Define your own agent configuration
+- **dev** - Full development team: Coder + Tester + Reviewer
+- **dev-quick** - Quick code implementation (Coder only)
+- **dev-test** - Code + test workflow (Coder + Tester)
 
 ## Tips
 
@@ -172,6 +177,12 @@ Type any message to chat with the agents!
                     team = await create_design_team(llm_config)
                 elif self.team_name == "magentic":
                     team = await create_magentic_team(llm_config)
+                elif self.team_name == "dev":
+                    team = await create_full_dev_team(llm_config)
+                elif self.team_name == "dev-quick":
+                    team = await create_quick_coder(llm_config)
+                elif self.team_name == "dev-test":
+                    team = await create_dev_team(llm_config, mode="test")
                 else:
                     team = await create_weather_agent_team(llm_config)  # default
 
@@ -230,6 +241,12 @@ Type any message to chat with the agents!
                             team = await create_design_team(llm_config)
                         elif self.team_name == "magentic":
                             team = await create_magentic_team(llm_config)
+                        elif self.team_name == "dev":
+                            team = await create_full_dev_team(llm_config)
+                        elif self.team_name == "dev-quick":
+                            team = await create_quick_coder(llm_config)
+                        elif self.team_name == "dev-test":
+                            team = await create_dev_team(llm_config, mode="test")
                         self.console.print("[green]✓ Team switched![/green]")
                     continue
 
@@ -356,6 +373,12 @@ Type any message to chat with the agents!
                 team = await create_design_team(llm_config)
             elif self.team_name == "magentic":
                 team = await create_magentic_team(llm_config)
+            elif self.team_name == "dev":
+                team = await create_full_dev_team(llm_config)
+            elif self.team_name == "dev-quick":
+                team = await create_quick_coder(llm_config)
+            elif self.team_name == "dev-test":
+                team = await create_dev_team(llm_config, mode="test")
             else:
                 team = await create_weather_agent_team(llm_config)
 
