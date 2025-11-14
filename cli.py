@@ -28,7 +28,8 @@ from config.settings import get_llm_config
 from agents.weather_agents import (
     create_weather_agent_team,
     create_simple_assistant,
-    create_data_team
+    create_data_team,
+    create_design_team
 )
 from autogen_agentchat.ui import Console as AutogenConsole
 from autogen_agentchat.messages import ChatMessage
@@ -105,6 +106,7 @@ Type '/help' for available commands.
 - **weather** - Multi-agent team with weather, joke, and executive agents
 - **simple** - Single assistant agent for general tasks
 - **data** - Data analyst with database and file access tools
+- **design** - UX Director, AI Expert, Principal Engineer for system design
 - **custom** - Define your own agent configuration
 
 ## Tips
@@ -161,6 +163,8 @@ Type any message to chat with the agents!
                 team = await create_simple_assistant(llm_config)
             elif self.team_name == "data":
                 team = await create_data_team(llm_config)
+            elif self.team_name == "design":
+                team = await create_design_team(llm_config)
             else:
                 team = await create_weather_agent_team(llm_config)  # default
         except Exception as e:
@@ -214,6 +218,8 @@ Type any message to chat with the agents!
                             team = await create_simple_assistant(llm_config)
                         elif self.team_name == "data":
                             team = await create_data_team(llm_config)
+                        elif self.team_name == "design":
+                            team = await create_design_team(llm_config)
                         self.console.print("[green]✓ Team switched![/green]")
                     continue
 
@@ -329,6 +335,8 @@ Type any message to chat with the agents!
             team = await create_simple_assistant(llm_config)
         elif self.team_name == "data":
             team = await create_data_team(llm_config)
+        elif self.team_name == "design":
+            team = await create_design_team(llm_config)
         else:
             team = await create_weather_agent_team(llm_config)
 
@@ -402,7 +410,7 @@ def main():
         '--team',
         '-t',
         default='weather',
-        choices=['weather', 'simple', 'data', 'custom'],
+        choices=['weather', 'simple', 'data', 'design', 'custom'],
         help='Agent team to use (default: weather)'
     )
 
