@@ -39,7 +39,15 @@ def get_gemini_llm_config():
     """
     google_api_key = os.environ.get("GOOGLE_API_KEY")
     if not google_api_key:
-        raise ValueError("FATAL: GOOGLE_API_KEY not found in .env file.")
+        raise ValueError(
+            "\n❌ GOOGLE_API_KEY not found in .env file.\n\n"
+            "To fix this:\n"
+            "1. Get your API key from: https://aistudio.google.com/app/apikey\n"
+            "2. Create/edit .env file in the project root\n"
+            "3. Add this line: GOOGLE_API_KEY=your_actual_key_here\n"
+            "4. Run the CLI again\n\n"
+            "Need help? Check the README or run: ./cli.py --help"
+        )
 
     # The llm_config is a dictionary that specifies the provider, model, and API key.
     llm_config = {
@@ -63,7 +71,30 @@ def get_azure_llm_config():
     api_version = "2024-02-01"
 
     if not all([api_key, endpoint]):
-        raise ValueError("FATAL: AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT must be in your .env file.")
+        missing = []
+        if not api_key:
+            missing.append("AZURE_OPENAI_API_KEY")
+        if not endpoint:
+            missing.append("AZURE_OPENAI_ENDPOINT")
+
+        raise ValueError(
+            f"\n❌ Missing Azure OpenAI configuration: {', '.join(missing)}\n\n"
+            "To fix this:\n"
+            "1. Create an Azure OpenAI resource:\n"
+            "   → Go to: https://portal.azure.com\n"
+            "   → Search for 'Azure OpenAI'\n"
+            "   → Create a resource and deploy a model (e.g., gpt-4o)\n\n"
+            "2. Get your credentials:\n"
+            "   → In Azure Portal, go to your Azure OpenAI resource\n"
+            "   → Click 'Keys and Endpoint' in the left menu\n"
+            "   → Copy 'KEY 1' and 'Endpoint'\n\n"
+            "3. Create/edit .env file in the project root and add:\n"
+            "   AZURE_OPENAI_API_KEY=your_key_from_azure\n"
+            "   AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/\n"
+            "   AZURE_OPENAI_DEPLOYMENT_NAME=your_deployment_name\n\n"
+            "4. Run the CLI again\n\n"
+            "Need help? Run: ./setup_cli.sh"
+        )
 
     # The llm_config dictionary is the new standard for configuring agents.
     llm_config = {
@@ -83,7 +114,48 @@ def get_azure_llm_config():
             "multiple_system_messages": True # It supports multiple system prompts
         }
     }
-    
+
     print(f"✅ LLM Config created for Azure deployment: {deployment_name}")
     return llm_config
+
+
+def get_llm_config(provider: str = "azure"):
+    """
+    Returns the LLM configuration for the specified provider.
+
+    Args:
+        provider: One of "azure", "google", or "openai"
+
+    Returns:
+        Dictionary with LLM configuration
+    """
+    if provider.lower() == "azure":
+        return get_azure_llm_config()
+    elif provider.lower() == "google":
+        return get_gemini_llm_config()
+    elif provider.lower() == "openai":
+        # For OpenAI, use similar structure to Azure
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "\n❌ OPENAI_API_KEY not found in .env file.\n\n"
+                "To fix this:\n"
+                "1. Get your API key from: https://platform.openai.com/api-keys\n"
+                "   (You'll need an OpenAI account)\n\n"
+                "2. Create/edit .env file in the project root\n"
+                "3. Add this line: OPENAI_API_KEY=sk-your_actual_key_here\n"
+                "4. Run the CLI again\n\n"
+                "💡 Tip: OpenAI keys start with 'sk-'\n\n"
+                "Need help? Check the README or run: ./cli.py --help"
+            )
+
+        llm_config = {
+            "provider": "openai",
+            "model": "gpt-4",
+            "api_key": api_key,
+        }
+        print("✅ LLM Config created for OpenAI.")
+        return llm_config
+    else:
+        raise ValueError(f"Unknown provider: {provider}. Choose 'azure', 'google', or 'openai'.")
 
