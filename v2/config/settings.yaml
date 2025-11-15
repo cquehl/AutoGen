@@ -1,0 +1,123 @@
+# Yamazaki v2 Configuration
+# Settings for the AutoGen agentic system
+
+# Environment
+environment: development
+
+# Default LLM provider
+default_provider: azure
+
+# Database Configuration
+database:
+  url: sqlite:///./data/yamazaki.db
+  pool_size: 10
+  max_overflow: 20
+  pool_timeout: 30
+  query_timeout: 60
+  pool_recycle: 3600
+
+# Security Configuration
+security:
+  allowed_directories:
+    - ./data
+    - ~/agent_output
+    - ~/yamazaki_data
+  blocked_file_patterns:
+    - "\.ssh"
+    - "\.aws"
+    - "\.env"
+    - "id_rsa"
+    - "password"
+    - "secret"
+    - "/etc/"
+    - "\.key$"
+  allowed_sql_commands:
+    - SELECT
+    - INSERT
+    - UPDATE
+    - DELETE
+  max_query_length: 10000
+  enable_audit_log: true
+  operation_timeout: 30
+
+# Observability Configuration
+observability:
+  log_level: INFO
+  log_format: console
+  enable_telemetry: true
+  service_name: yamazaki-v2
+  enable_metrics: true
+  metrics_port: 9090
+
+# Agent Configurations
+agents:
+  weather:
+    name: Weather_Agent
+    model_provider: azure
+    temperature: 0.7
+    max_tokens: 2048
+    tools:
+      - weather.forecast
+    reflect_on_tool_use: true
+
+  data_analyst:
+    name: Data_Analyst
+    model_provider: azure
+    temperature: 0.3
+    max_tokens: 4096
+    tools:
+      - database.query
+      - database.list_tables
+      - database.describe_table
+      - file.read
+      - file.read_csv
+      - file.write
+      - file.write_csv
+      - file.list_directory
+    reflect_on_tool_use: true
+
+  web_surfer:
+    name: WebSurfer
+    model_provider: azure
+    temperature: 0.7
+    max_tokens: 4096
+    tools:
+      - web.search
+      - web.fetch
+      - web.scrape
+    reflect_on_tool_use: true
+
+  orchestrator:
+    name: Orchestrator
+    model_provider: azure
+    temperature: 0.8
+    max_tokens: 4096
+    tools: []
+    reflect_on_tool_use: false
+
+# Team Configurations
+teams:
+  weather_team:
+    name: Weather Team
+    agents:
+      - weather
+      - orchestrator
+    max_turns: 12
+    allow_repeated_speaker: false
+
+  data_team:
+    name: Data Analysis Team
+    agents:
+      - data_analyst
+      - orchestrator
+    max_turns: 20
+    allow_repeated_speaker: false
+
+  magentic_one:
+    name: Magentic-One
+    agents:
+      - orchestrator
+      - web_surfer
+      - data_analyst
+    max_turns: 30
+    allow_repeated_speaker: false
