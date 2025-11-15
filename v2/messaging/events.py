@@ -22,10 +22,10 @@ class EventType(Enum):
 @dataclass
 class Event:
     """Base event class."""
-    event_type: EventType
+    event_type: EventType = EventType.SYSTEM_INFO
+    event_id: Optional[str] = field(default=None)
     timestamp: datetime = field(default_factory=lambda: datetime.now())
     metadata: Dict[str, Any] = field(default_factory=dict)
-    event_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert event to dictionary."""
@@ -40,15 +40,14 @@ class Event:
 @dataclass
 class AgentMessageEvent(Event):
     """Event for agent messages."""
-    agent_name: str
-    role: str  # "user", "assistant", "system"
-    content: str
+    agent_name: str = ""
+    role: str = "assistant"  # "user", "assistant", "system"
+    content: str = ""
     recipient: Optional[str] = None  # Target agent name
     conversation_id: Optional[str] = None
 
     def __post_init__(self):
-        if not hasattr(self, 'event_type'):
-            self.event_type = EventType.AGENT_MESSAGE
+        self.event_type = EventType.AGENT_MESSAGE
 
     def to_dict(self) -> Dict[str, Any]:
         data = super().to_dict()
@@ -65,17 +64,16 @@ class AgentMessageEvent(Event):
 @dataclass
 class ToolExecutionEvent(Event):
     """Event for tool execution."""
-    tool_name: str
-    agent_name: str
-    parameters: Dict[str, Any]
+    tool_name: str = ""
+    agent_name: str = ""
+    parameters: Dict[str, Any] = field(default_factory=dict)
     result: Optional[Any] = None
     success: bool = True
     error: Optional[str] = None
     execution_time_ms: Optional[float] = None
 
     def __post_init__(self):
-        if not hasattr(self, 'event_type'):
-            self.event_type = EventType.TOOL_EXECUTION
+        self.event_type = EventType.TOOL_EXECUTION
 
     def to_dict(self) -> Dict[str, Any]:
         data = super().to_dict()
@@ -93,20 +91,19 @@ class ToolExecutionEvent(Event):
 @dataclass
 class WorkflowEvent(Event):
     """Event for workflow state changes."""
-    workflow_id: str
+    workflow_id: str = ""
     node_name: Optional[str] = None
     status: str = "running"  # "running", "completed", "failed"
     payload: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         # Determine event type based on status
-        if not hasattr(self, 'event_type'):
-            if self.status == "running" and not self.node_name:
-                self.event_type = EventType.WORKFLOW_START
-            elif self.status in ("completed", "failed"):
-                self.event_type = EventType.WORKFLOW_END
-            else:
-                self.event_type = EventType.WORKFLOW_NODE
+        if self.status == "running" and not self.node_name:
+            self.event_type = EventType.WORKFLOW_START
+        elif self.status in ("completed", "failed"):
+            self.event_type = EventType.WORKFLOW_END
+        else:
+            self.event_type = EventType.WORKFLOW_NODE
 
     def to_dict(self) -> Dict[str, Any]:
         data = super().to_dict()
@@ -122,17 +119,16 @@ class WorkflowEvent(Event):
 @dataclass
 class SystemEvent(Event):
     """Event for system-level notifications."""
-    level: str  # "info", "warning", "error"
-    message: str
+    level: str = "info"  # "info", "warning", "error"
+    message: str = ""
     component: Optional[str] = None
     error_details: Optional[Dict[str, Any]] = None
 
     def __post_init__(self):
-        if not hasattr(self, 'event_type'):
-            if self.level == "error":
-                self.event_type = EventType.SYSTEM_ERROR
-            else:
-                self.event_type = EventType.SYSTEM_INFO
+        if self.level == "error":
+            self.event_type = EventType.SYSTEM_ERROR
+        else:
+            self.event_type = EventType.SYSTEM_INFO
 
     def to_dict(self) -> Dict[str, Any]:
         data = super().to_dict()
