@@ -18,9 +18,8 @@ async def get_local_forecast() -> dict | str:
         print("--- Calling Weather Tool ---")
         async with httpx.AsyncClient(headers=headers) as client:
             response = await client.get(forecast_url)
-            response.raise_for_status()  # Raise an exception for bad status codes
+            response.raise_for_status()
             forecast_data = response.json()
-            # Return the useful part of the JSON response
             return forecast_data["properties"]
             
     except httpx.HTTPStatusError as e:

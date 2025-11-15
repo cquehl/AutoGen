@@ -152,6 +152,27 @@ def _validate_file_path(file_path: str, operation: str = "read") -> tuple[bool, 
         return False, f"Invalid file path: {str(e)}", None
 
 
+def _validate_table_name(table_name: str) -> tuple[bool, Optional[str]]:
+    """
+    Validate table name to prevent SQL injection.
+
+    Args:
+        table_name: Table name to validate
+
+    Returns:
+        (is_valid, error_message) tuple
+    """
+    # Only allow alphanumeric characters and underscores
+    if not re.match(r'^[a-zA-Z0-9_]+$', table_name):
+        return False, f"Invalid table name: must contain only alphanumeric characters and underscores"
+
+    # Prevent excessively long table names
+    if len(table_name) > 64:
+        return False, "Table name too long (max 64 characters)"
+
+    return True, None
+
+
 def _convert_to_async_url(connection_string: str) -> str:
     """
     Convert standard database URL to async version.
@@ -209,6 +230,18 @@ async def _get_connection_pool(connection_string: str) -> AsyncEngine:
     _connection_pools[connection_string] = engine
 
     return engine
+
+
+async def dispose_connection_pools():
+    """
+    Dispose of all connection pools and cleanup resources.
+
+    Call this when shutting down the application to properly close
+    all database connections.
+    """
+    for connection_string, engine in _connection_pools.items():
+        await engine.dispose()
+    _connection_pools.clear()
 
 
 class DatabaseTool:
@@ -393,15 +426,28 @@ class DatabaseTool:
         Returns:
             List of column information dictionaries
         """
+        # Security: Validate table name to prevent SQL injection
+        is_valid, error_msg = _validate_table_name(table_name)
+        if not is_valid:
+            print(f"Error: {error_msg}")
+            return []
+
         if self.db_type == "sqlite":
+            # Safe after validation
             query = f"PRAGMA table_info({table_name})"
         elif self.db_type == "postgresql":
-            query = f"""
+            # Use parameterized query
+            query = """
                 SELECT column_name, data_type, is_nullable
                 FROM information_schema.columns
-                WHERE table_name = '{table_name}'
+                WHERE table_name = %s
             """
+            result = self.execute_query(query, (table_name,))
+            if result.get("success"):
+                return result["results"]
+            return []
         elif self.db_type == "mysql":
+            # Safe after validation
             query = f"DESCRIBE {table_name}"
         else:
             return []
@@ -457,13 +503,29 @@ async def query_database(
         # Get connection pool
         engine = await _get_connection_pool(conn_str)
 
-        # Execute query with timeout
-        async with asyncio.timeout(QUERY_TIMEOUT):
+        # Execute query with timeout (compatible with Python 3.10+)
+        try:
             async with engine.begin() as conn:
-                # Convert params to dict for SQLAlchemy if needed
+                # Handle parameters - SQLAlchemy text() requires dict for named params
+                # Convert tuple/list to dict with numeric keys for compatibility
                 if params:
-                    # SQLAlchemy uses :param syntax, but we'll use positional
-                    result = await conn.execute(text(query), params if isinstance(params, dict) else {})
+                    if isinstance(params, (tuple, list)):
+                        # Convert positional params to named params
+                        # Replace ? with :param0, :param1, etc.
+                        modified_query = query
+                        param_dict = {}
+                        for i, param in enumerate(params):
+                            modified_query = modified_query.replace('?', f':param{i}', 1)
+                            param_dict[f'param{i}'] = param
+                        result = await conn.execute(text(modified_query), param_dict)
+                    elif isinstance(params, dict):
+                        result = await conn.execute(text(query), params)
+                    else:
+                        return {
+                            "success": False,
+                            "error": "params must be tuple, list, or dict",
+                            "query": query[:100]
+                        }
                 else:
                     result = await conn.execute(text(query))
 
@@ -490,12 +552,13 @@ async def query_database(
                         "message": f"{query_type.value} completed successfully"
                     }
 
-    except asyncio.TimeoutError:
-        return {
-            "success": False,
-            "error": f"Query timed out after {QUERY_TIMEOUT} seconds",
-            "query": query[:100]
-        }
+        except asyncio.TimeoutError:
+            return {
+                "success": False,
+                "error": f"Query timed out after {QUERY_TIMEOUT} seconds",
+                "query": query[:100]
+            }
+
     except Exception as e:
         return {
             "success": False,
@@ -555,26 +618,38 @@ async def describe_database_table(table_name: str, connection_string: str = None
         Table schema information
     """
     try:
+        # Security: Validate table name to prevent SQL injection
+        is_valid, error_msg = _validate_table_name(table_name)
+        if not is_valid:
+            return {"success": False, "error": error_msg, "table": table_name}
+
         # Get connection string from environment if not provided
         conn_str = connection_string or os.getenv("DATABASE_URL")
         if not conn_str:
             return {"success": False, "error": "No database connection string provided"}
 
-        # Determine database type and build query
+        # Determine database type and build query (safe now after validation)
         if "sqlite" in conn_str:
             query = f"PRAGMA table_info({table_name})"
         elif "postgresql" in conn_str:
-            query = f"""
+            # Use parameterized query for PostgreSQL
+            query = """
                 SELECT column_name, data_type, is_nullable
                 FROM information_schema.columns
-                WHERE table_name = '{table_name}'
+                WHERE table_name = :table_name
             """
+            # Use query_database with dict params
+            result = await query_database(query, conn_str, {"table_name": table_name})
+            if result.get("success"):
+                return {"success": True, "table": table_name, "schema": result["results"]}
+            else:
+                return result
         elif "mysql" in conn_str:
             query = f"DESCRIBE {table_name}"
         else:
             return {"success": False, "error": "Unsupported database type"}
 
-        # Use query_database to leverage connection pooling
+        # Use query_database to leverage connection pooling (for SQLite and MySQL)
         result = await query_database(query, conn_str)
 
         if result.get("success"):
