@@ -280,6 +280,7 @@ class ToolRegistry:
             from .file import read_tool, write_tool
             from .weather import forecast_tool
             from .web import fetch_tool, screenshot_tool
+            from .shell import bash_tool
         except ImportError as e:
             # Some tools may not exist yet
             pass

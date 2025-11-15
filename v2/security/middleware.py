@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime
 
-from .validators import SQLValidator, PathValidator, QueryType
+from .validators import SQLValidator, PathValidator, ShellValidator, QueryType
 
 
 class OperationType(str, Enum):
@@ -20,6 +20,7 @@ class OperationType(str, Enum):
     FILE_READ = "file_read"
     FILE_WRITE = "file_write"
     WEB_FETCH = "web_fetch"
+    SHELL_COMMAND = "shell_command"
 
 
 @dataclass
@@ -138,6 +139,7 @@ class SecurityMiddleware:
         self.validators = {
             "sql": SQLValidator(config),
             "path": PathValidator(config),
+            "shell": ShellValidator(config),
         }
         self.audit_logger = AuditLogger(enabled=config.enable_audit_log)
 
@@ -163,6 +165,8 @@ class SecurityMiddleware:
             is_valid, error = self._validate_sql(operation)
         elif operation.type in [OperationType.FILE_READ, OperationType.FILE_WRITE]:
             is_valid, error = self._validate_file(operation)
+        elif operation.type == OperationType.SHELL_COMMAND:
+            is_valid, error = self._validate_shell(operation)
         else:
             is_valid, error = True, None  # No validation for other types yet
 
@@ -212,6 +216,16 @@ class SecurityMiddleware:
         is_valid, error, _ = validator.validate(file_path, op_type)
         return is_valid, error
 
+    def _validate_shell(self, operation: Operation) -> tuple[bool, Optional[str]]:
+        """Validate shell command operation"""
+        command = operation.params.get("command", "")
+        allow_pipes = operation.params.get("allow_pipes", True)
+        allow_chaining = operation.params.get("allow_chaining", True)
+
+        validator = self.validators["shell"]
+        result = validator.validate(command, allow_pipes, allow_chaining)
+        return result.is_valid, result.error
+
     def get_sql_validator(self) -> SQLValidator:
         """Get SQL validator"""
         return self.validators["sql"]
@@ -219,6 +233,10 @@ class SecurityMiddleware:
     def get_path_validator(self) -> PathValidator:
         """Get path validator"""
         return self.validators["path"]
+
+    def get_shell_validator(self) -> ShellValidator:
+        """Get shell validator"""
+        return self.validators["shell"]
 
     def get_audit_events(self, limit: int = 100) -> list:
         """Get recent audit events"""
