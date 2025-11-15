@@ -217,6 +217,63 @@ class Container:
 
         return self._singletons["state_manager"]
 
+    def get_background_job_manager(self):
+        """
+        Get background job manager (singleton).
+
+        Returns:
+            BackgroundJobManager instance
+        """
+        if "background_job_manager" not in self._singletons:
+            from ..tools.shell.background_job_manager import BackgroundJobManager
+
+            self._singletons["background_job_manager"] = BackgroundJobManager(
+                max_jobs=self.settings.shell.max_background_jobs,
+                max_output_lines=self.settings.shell.max_output_lines,
+            )
+
+        return self._singletons["background_job_manager"]
+
+    def get_command_executor(self):
+        """
+        Get command executor (singleton).
+
+        Returns the BashCommandExecutor which wraps BashTool.
+        This is available after tool registry is initialized.
+
+        Returns:
+            CommandExecutor instance
+        """
+        if "command_executor" not in self._singletons:
+            from ..core.command_executor import BashCommandExecutor
+
+            # Get the bash tool from tool registry
+            tool_registry = self.get_tool_registry()
+            bash_tool = tool_registry.create_tool("shell.bash")
+
+            self._singletons["command_executor"] = BashCommandExecutor(bash_tool)
+
+        return self._singletons["command_executor"]
+
+    def get_vision_service(self):
+        """
+        Get vision service (singleton).
+
+        Provides vision model capabilities for image analysis.
+
+        Returns:
+            VisionService instance
+        """
+        if "vision_service" not in self._singletons:
+            from ..services.vision_service import VisionService
+
+            self._singletons["vision_service"] = VisionService(
+                config=self.settings.multimodal,
+                llm_settings=self.settings,
+            )
+
+        return self._singletons["vision_service"]
+
     async def dispose(self):
         """
         Dispose of all resources and cleanup.
@@ -234,6 +291,13 @@ class Container:
         # Shutdown observability
         if "observability" in self._singletons:
             await self._singletons["observability"].shutdown()
+
+        # Cleanup background jobs
+        if "background_job_manager" in self._singletons:
+            # Kill all running jobs before shutdown
+            job_manager = self._singletons["background_job_manager"]
+            for job_id in list(job_manager.jobs.keys()):
+                await job_manager.kill_job(job_id)
 
         # Clear singletons
         self._singletons.clear()
