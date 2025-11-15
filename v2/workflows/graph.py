@@ -84,7 +84,13 @@ class WorkflowGraph:
 
         Returns:
             Self for method chaining
+
+        Raises:
+            ValueError: If node with same name already exists
         """
+        if node_name in self._nodes:
+            raise ValueError(f"Node '{node_name}' already exists in graph")
+
         node = WorkflowNode(name=node_name, agent_name=agent_name, metadata=metadata)
         self._nodes[node_name] = node
         self._graph.add_node(node_name, node=node)
@@ -110,12 +116,14 @@ class WorkflowGraph:
             Self for method chaining
 
         Raises:
-            ValueError: If source or target node doesn't exist
+            ValueError: If source or target node doesn't exist or if self-loop detected
         """
         if source not in self._nodes:
             raise ValueError(f"Source node '{source}' not found in graph")
         if target not in self._nodes:
             raise ValueError(f"Target node '{target}' not found in graph")
+        if source == target:
+            raise ValueError(f"Self-loops not allowed: {source} -> {target}")
 
         edge = WorkflowEdge(source=source, target=target, condition=condition, metadata=metadata)
         self._edges.append(edge)

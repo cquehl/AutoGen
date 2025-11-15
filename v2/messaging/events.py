@@ -23,7 +23,7 @@ class EventType(Enum):
 class Event:
     """Base event class."""
     event_type: EventType
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=lambda: datetime.now())
     metadata: Dict[str, Any] = field(default_factory=dict)
     event_id: Optional[str] = None
 

@@ -253,24 +253,37 @@ class Container:
         return cls(settings=settings)
 
 
-# Global container instance
+# Global container instance with thread safety
+import threading
+
 _container: Optional[Container] = None
+_container_lock = threading.Lock()
 
 
 def get_container() -> Container:
     """
-    Get global container instance.
+    Get global container instance with thread-safe initialization.
 
     Returns:
         Container singleton
+
+    FIXED: Double-checked locking for thread safety
     """
     global _container
     if _container is None:
-        _container = Container()
+        with _container_lock:
+            # Double-check after acquiring lock
+            if _container is None:
+                _container = Container()
     return _container
 
 
 def reset_container():
-    """Reset global container (useful for testing)"""
+    """
+    Reset global container (useful for testing).
+
+    FIXED: Thread-safe reset
+    """
     global _container
-    _container = None
+    with _container_lock:
+        _container = None

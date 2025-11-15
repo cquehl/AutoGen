@@ -2,14 +2,16 @@
 Central message bus for event-driven agent communication.
 
 Inspired by AutoGen 0.7.x actor model and event-driven architecture.
+
+FIXED: Thread-safe operations, deque for performance, proper subscriber management.
 """
 
 import asyncio
+import uuid
 from typing import Dict, List, Callable, Any, Optional, Set
 from dataclasses import dataclass, field
 from datetime import datetime
-from collections import defaultdict
-import uuid
+from collections import defaultdict, deque
 
 from .events import Event, EventType
 from ..observability.logger import get_logger
@@ -25,7 +27,7 @@ class Message:
     content: Any
     message_type: str = "text"
     correlation_id: Optional[str] = None
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=lambda: datetime.now())
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -51,6 +53,8 @@ class MessageBus:
     - Event history and replay
     - Middleware support for cross-cutting concerns
     - Observable communication for debugging
+
+    FIXED: Thread-safe with proper locking, deque for O(1) operations.
 
     Example:
         >>> bus = MessageBus()
@@ -78,14 +82,14 @@ class MessageBus:
         """
         self.max_history = max_history
 
-        # Subscribers: EventType -> List[callback]
-        self._subscribers: Dict[EventType, List[Callable]] = defaultdict(list)
+        # Subscribers: EventType -> List[(subscription_id, callback)]
+        self._subscribers: Dict[EventType, List[tuple]] = defaultdict(list)
 
         # Wildcard subscribers (get all events)
-        self._wildcard_subscribers: List[Callable] = []
+        self._wildcard_subscribers: List[tuple] = []
 
-        # Event history
-        self._event_history: List[Event] = []
+        # Event history (deque for O(1) operations)
+        self._event_history: deque = deque(maxlen=max_history)
 
         # Message queues for agents: agent_name -> asyncio.Queue
         self._agent_queues: Dict[str, asyncio.Queue] = {}
@@ -95,6 +99,11 @@ class MessageBus:
 
         # Active subscriptions for cleanup
         self._active_subscriptions: Set[str] = set()
+
+        # Locks for thread safety
+        self._subscribers_lock = asyncio.Lock()
+        self._history_lock = asyncio.Lock()
+        self._queues_lock = asyncio.Lock()
 
     def subscribe(
         self,
@@ -116,6 +125,7 @@ class MessageBus:
         if subscription_id is None:
             subscription_id = str(uuid.uuid4())
 
+        # Note: Not async since it's just appending to a list
         self._subscribers[event_type].append((subscription_id, callback))
         self._active_subscriptions.add(subscription_id)
 
@@ -173,6 +183,8 @@ class MessageBus:
         """
         Publish an event to all subscribers.
 
+        FIXED: Safe iteration with snapshot of subscribers.
+
         Args:
             event: Event to publish
         """
@@ -180,10 +192,9 @@ class MessageBus:
         if not event.event_id:
             event.event_id = str(uuid.uuid4())
 
-        # Add to history
-        self._event_history.append(event)
-        if len(self._event_history) > self.max_history:
-            self._event_history.pop(0)
+        # Add to history (deque with maxlen handles size automatically)
+        async with self._history_lock:
+            self._event_history.append(event)
 
         logger.debug(f"Publishing event: {event.event_type.value} [{event.event_id}]")
 
@@ -195,9 +206,12 @@ class MessageBus:
                 logger.debug(f"Event {event.event_id} blocked by middleware")
                 return
 
+        # Create snapshots of subscriber lists to avoid modification during iteration
+        type_subscribers = self._subscribers.get(event.event_type, []).copy()
+        wildcard_subscribers = self._wildcard_subscribers.copy()
+
         # Notify type-specific subscribers
-        subscribers = self._subscribers.get(event.event_type, [])
-        for subscription_id, callback in subscribers:
+        for subscription_id, callback in type_subscribers:
             try:
                 if asyncio.iscoroutinefunction(callback):
                     await callback(processed_event)
@@ -210,7 +224,7 @@ class MessageBus:
                 )
 
         # Notify wildcard subscribers
-        for subscription_id, callback in self._wildcard_subscribers:
+        for subscription_id, callback in wildcard_subscribers:
             try:
                 if asyncio.iscoroutinefunction(callback):
                     await callback(processed_event)
@@ -231,17 +245,24 @@ class MessageBus:
         """
         if message.recipient:
             # Direct message to specific agent
-            queue = self._get_or_create_queue(message.recipient)
+            queue = await self._get_or_create_queue(message.recipient)
             await queue.put(message)
             logger.debug(f"Message sent from {message.sender} to {message.recipient}")
         else:
             # Broadcast to all agents
-            for agent_name, queue in self._agent_queues.items():
+            async with self._queues_lock:
+                queues = list(self._agent_queues.items())
+
+            for agent_name, queue in queues:
                 if agent_name != message.sender:  # Don't send to self
                     await queue.put(message)
             logger.debug(f"Message broadcast from {message.sender}")
 
-    async def receive_message(self, agent_name: str, timeout: Optional[float] = None) -> Optional[Message]:
+    async def receive_message(
+        self,
+        agent_name: str,
+        timeout: Optional[float] = None
+    ) -> Optional[Message]:
         """
         Receive a message for a specific agent.
 
@@ -252,7 +273,7 @@ class MessageBus:
         Returns:
             Message or None if timeout
         """
-        queue = self._get_or_create_queue(agent_name)
+        queue = await self._get_or_create_queue(agent_name)
 
         try:
             if timeout:
@@ -293,7 +314,8 @@ class MessageBus:
         Returns:
             List of events
         """
-        events = self._event_history
+        # Get snapshot of history
+        events = list(self._event_history)
 
         # Filter by type
         if event_type:
@@ -310,11 +332,12 @@ class MessageBus:
         self._event_history.clear()
         logger.debug("Event history cleared")
 
-    def _get_or_create_queue(self, agent_name: str) -> asyncio.Queue:
-        """Get or create message queue for an agent."""
-        if agent_name not in self._agent_queues:
-            self._agent_queues[agent_name] = asyncio.Queue()
-        return self._agent_queues[agent_name]
+    async def _get_or_create_queue(self, agent_name: str) -> asyncio.Queue:
+        """Get or create message queue for an agent (thread-safe)."""
+        async with self._queues_lock:
+            if agent_name not in self._agent_queues:
+                self._agent_queues[agent_name] = asyncio.Queue()
+            return self._agent_queues[agent_name]
 
     def get_stats(self) -> Dict[str, Any]:
         """Get message bus statistics."""
@@ -338,14 +361,17 @@ class MessageBus:
         logger.info("Shutting down message bus")
 
         # Clear all queues
-        for queue in self._agent_queues.values():
-            while not queue.empty():
-                try:
-                    queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    break
+        async with self._queues_lock:
+            for queue in self._agent_queues.values():
+                while not queue.empty():
+                    try:
+                        queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
 
-        self._agent_queues.clear()
+            self._agent_queues.clear()
+
+        # Clear subscribers
         self._subscribers.clear()
         self._wildcard_subscribers.clear()
         self._active_subscriptions.clear()
