@@ -174,12 +174,59 @@ class Container:
 
         return self._singletons["agent_factory"]
 
+    def get_message_bus(self):
+        """
+        Get message bus (singleton).
+
+        Returns:
+            MessageBus instance
+        """
+        if "message_bus" not in self._singletons:
+            from ..messaging.message_bus import MessageBus
+            from ..messaging.handlers import LoggingHandler, MetricsHandler
+
+            bus = MessageBus(max_history=1000)
+
+            # Add default handlers
+            logging_handler = LoggingHandler(log_level="INFO")
+            metrics_handler = MetricsHandler()
+
+            bus.subscribe_all(logging_handler.handle)
+            bus.subscribe_all(metrics_handler.handle)
+
+            self._singletons["message_bus"] = bus
+            self._singletons["metrics_handler"] = metrics_handler
+
+        return self._singletons["message_bus"]
+
+    def get_state_manager(self):
+        """
+        Get state manager (singleton).
+
+        Returns:
+            StateManager instance
+        """
+        if "state_manager" not in self._singletons:
+            from ..memory.state_manager import StateManager
+
+            self._singletons["state_manager"] = StateManager(
+                storage_path=".autogen_state",
+                enable_versioning=True,
+                max_versions=10,
+            )
+
+        return self._singletons["state_manager"]
+
     async def dispose(self):
         """
         Dispose of all resources and cleanup.
 
         Call this on application shutdown.
         """
+        # Shutdown message bus
+        if "message_bus" in self._singletons:
+            await self._singletons["message_bus"].shutdown()
+
         # Close connection pool
         if "connection_pool" in self._singletons:
             await self._singletons["connection_pool"].dispose()
