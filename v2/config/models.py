@@ -71,6 +71,7 @@ class DatabaseConfig(BaseModel):
 class SecurityConfig(BaseModel):
     """Security configuration for tools and operations"""
 
+    # File operation security
     allowed_directories: List[Path] = Field(
         default_factory=lambda: [
             Path.cwd(),
@@ -92,6 +93,8 @@ class SecurityConfig(BaseModel):
         ],
         description="Regex patterns for blocked file paths"
     )
+
+    # SQL security
     allowed_sql_commands: List[str] = Field(
         default=["SELECT", "INSERT", "UPDATE", "DELETE"],
         description="Allowed SQL command types"
@@ -115,6 +118,28 @@ class SecurityConfig(BaseModel):
         le=100000,
         description="Maximum allowed SQL query length"
     )
+
+    # Shell command security
+    enable_shell_validation: bool = Field(
+        default=True,
+        description="Enable shell command validation"
+    )
+    allow_dangerous_shell_commands: bool = Field(
+        default=False,
+        description="Allow dangerous commands (rm, shutdown, etc.)"
+    )
+    blocked_shell_commands: List[str] = Field(
+        default_factory=lambda: [
+            "rm -rf /",
+            "mkfs",
+            "dd if=/dev/zero",
+            ":(){ :|:& };:",  # Fork bomb
+            "chmod -R 777 /",
+        ],
+        description="Shell commands that are always blocked"
+    )
+
+    # General security
     enable_audit_log: bool = Field(
         default=True,
         description="Enable security audit logging"
@@ -124,6 +149,165 @@ class SecurityConfig(BaseModel):
         ge=1,
         le=600,
         description="Default timeout for security-validated operations"
+    )
+
+
+class ShellConfig(BaseModel):
+    """Configuration for shell/bash tools"""
+
+    default_timeout: int = Field(
+        default=120,
+        ge=1,
+        le=3600,
+        description="Default timeout for shell commands (seconds)"
+    )
+    max_timeout: int = Field(
+        default=600,
+        ge=1,
+        le=3600,
+        description="Maximum timeout for shell commands (seconds)"
+    )
+    max_background_jobs: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Maximum number of concurrent background jobs"
+    )
+    max_output_lines: int = Field(
+        default=1000,
+        ge=100,
+        le=10000,
+        description="Maximum output lines per background job (ring buffer)"
+    )
+    allowed_working_directories: List[Path] = Field(
+        default_factory=lambda: [Path.cwd()],
+        description="Directories allowed for command execution"
+    )
+
+
+class GitConfig(BaseModel):
+    """Configuration for Git/GitHub tools"""
+
+    default_remote: str = Field(
+        default="origin",
+        description="Default git remote name"
+    )
+    default_branch: str = Field(
+        default="main",
+        description="Default branch name"
+    )
+    protected_branches: List[str] = Field(
+        default_factory=lambda: ["main", "master", "production"],
+        description="Branches protected from force push"
+    )
+    auto_sign_commits: bool = Field(
+        default=False,
+        description="Automatically sign commits with GPG"
+    )
+    commit_message_template: str = Field(
+        default="{message}\n\n🤖 Generated with AutoGen v2\n\nCo-Authored-By: AutoGen <noreply@example.com>",
+        description="Template for commit messages (use {message} placeholder)"
+    )
+    require_gh_cli: bool = Field(
+        default=True,
+        description="Require gh CLI for GitHub operations"
+    )
+
+
+class WebSearchConfig(BaseModel):
+    """Configuration for web search tools"""
+
+    provider: Literal["brave", "serper", "duckduckgo"] = Field(
+        default="brave",
+        description="Web search provider"
+    )
+    brave_api_key: Optional[str] = Field(
+        default=None,
+        description="Brave Search API key"
+    )
+    serper_api_key: Optional[str] = Field(
+        default=None,
+        description="Serper API key"
+    )
+    default_num_results: int = Field(
+        default=10,
+        ge=1,
+        le=20,
+        description="Default number of search results"
+    )
+    default_country: str = Field(
+        default="US",
+        description="Default country code for searches"
+    )
+    default_search_lang: str = Field(
+        default="en",
+        description="Default search language"
+    )
+    safesearch: Literal["off", "moderate", "strict"] = Field(
+        default="moderate",
+        description="Safe search level"
+    )
+    cache_results: bool = Field(
+        default=True,
+        description="Cache search results (15 minutes)"
+    )
+
+
+class MultimodalConfig(BaseModel):
+    """Configuration for multimodal tools (images, PDFs)"""
+
+    vision_provider: Literal["claude", "gpt4v", "gemini"] = Field(
+        default="claude",
+        description="Vision model provider"
+    )
+    vision_model: str = Field(
+        default="claude-3-sonnet-20240229",
+        description="Vision model name"
+    )
+    max_image_size_mb: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum image size in MB"
+    )
+    supported_image_formats: List[str] = Field(
+        default_factory=lambda: [".png", ".jpg", ".jpeg", ".gif", ".webp"],
+        description="Supported image file formats"
+    )
+    max_pdf_pages: int = Field(
+        default=100,
+        ge=1,
+        le=1000,
+        description="Maximum number of PDF pages to process"
+    )
+    cache_image_analysis: bool = Field(
+        default=True,
+        description="Cache image analysis results"
+    )
+    default_vision_max_tokens: int = Field(
+        default=1000,
+        ge=100,
+        le=4096,
+        description="Default max tokens for vision responses"
+    )
+
+
+class InteractionConfig(BaseModel):
+    """Configuration for user interaction tools"""
+
+    use_rich_prompts: bool = Field(
+        default=True,
+        description="Use rich terminal UI (questionary) for prompts"
+    )
+    default_prompt_timeout: int = Field(
+        default=300,
+        ge=10,
+        le=3600,
+        description="Timeout for user prompts (seconds)"
+    )
+    auto_confirm_safe_operations: bool = Field(
+        default=False,
+        description="Auto-confirm operations marked as safe"
     )
 
 
@@ -288,6 +472,28 @@ class AppSettings(BaseSettings):
     observability: ObservabilityConfig = Field(
         default_factory=ObservabilityConfig,
         description="Observability configuration"
+    )
+
+    # Tool Configurations
+    shell: ShellConfig = Field(
+        default_factory=ShellConfig,
+        description="Shell/bash tool configuration"
+    )
+    git: GitConfig = Field(
+        default_factory=GitConfig,
+        description="Git/GitHub tool configuration"
+    )
+    web_search: WebSearchConfig = Field(
+        default_factory=WebSearchConfig,
+        description="Web search tool configuration"
+    )
+    multimodal: MultimodalConfig = Field(
+        default_factory=MultimodalConfig,
+        description="Multimodal tool configuration (images, PDFs)"
+    )
+    interaction: InteractionConfig = Field(
+        default_factory=InteractionConfig,
+        description="User interaction configuration"
     )
 
     # Agent and Team Configurations
