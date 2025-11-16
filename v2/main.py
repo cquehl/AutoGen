@@ -29,7 +29,8 @@ async def demo_weather_agent():
 
     logger.info("Created weather agent")
     print(f"Agent: {weather_agent}")
-    print(f"Tools: {[t.func.__name__ for t in weather_agent.tools]}\n")
+    # Note: tools are registered internally, not exposed as .tools attribute
+    print(f"Agent type: {type(weather_agent).__name__}\n")
 
     # Simulate usage (would normally use team.run())
     print("✓ Weather agent ready! (Uses weather.gov API)")
@@ -54,7 +55,7 @@ async def demo_data_analyst_agent():
 
     logger.info("Created data analyst agent")
     print(f"Agent: {data_agent}")
-    print(f"Tools: {len(data_agent.tools)} tools available\n")
+    print(f"Agent type: {type(data_agent).__name__}\n")
 
     print("✓ Data analyst agent ready!")
     print("  Example: 'Query the database for user statistics'")

@@ -228,8 +228,8 @@ class Container:
             from ..tools.shell.background_job_manager import BackgroundJobManager
 
             self._singletons["background_job_manager"] = BackgroundJobManager(
-                max_jobs=self.settings.shell.max_background_jobs,
-                max_output_lines=self.settings.shell.max_output_lines,
+                max_jobs=self.settings.shell_config.max_background_jobs,
+                max_output_lines=self.settings.shell_config.max_output_lines,
             )
 
         return self._singletons["background_job_manager"]

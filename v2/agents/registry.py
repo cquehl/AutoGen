@@ -207,14 +207,35 @@ class AgentRegistry:
 
         This scans for all agent modules and registers them.
         """
-        # Import agent modules to trigger registration
+        # Import agent modules and register them
         try:
-            from . import weather_agent
-            from . import data_analyst_agent
-            from . import orchestrator_agent
-            from . import web_surfer_agent
-        except ImportError as e:
-            # Some agents may not exist yet
+            from .weather_agent import WeatherAgent
+            self.register(
+                name=WeatherAgent.NAME,
+                agent_class=WeatherAgent,
+                default_tools=["weather.forecast"]
+            )
+        except ImportError:
+            pass
+
+        try:
+            from .data_analyst_agent import DataAnalystAgent
+            self.register(
+                name=DataAnalystAgent.NAME,
+                agent_class=DataAnalystAgent,
+                default_tools=["database.query", "database.list_tables"]
+            )
+        except ImportError:
+            pass
+
+        try:
+            from .orchestrator_agent import OrchestratorAgent
+            self.register(
+                name=OrchestratorAgent.NAME,
+                agent_class=OrchestratorAgent,
+                default_tools=[]
+            )
+        except ImportError:
             pass
 
     def __repr__(self) -> str:

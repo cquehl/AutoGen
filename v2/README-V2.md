@@ -117,14 +117,30 @@ AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_DEPLOYMENT_NAME=your_deployment
 ```
 
-### 3. Run Demo
+### 3. Run Interactive CLI
 
 ```bash
-cd v2
+# From project root
+python -m v2.cli
+
+# Or use the convenience script
+./run_cli.sh
+```
+
+This starts an interactive session where you can:
+- Chat with agents
+- Use `/help` to see available commands
+- Use `/agents` to list all agents
+- Use `/tools` to see available tools
+- Use `/info` for system information
+
+### 4. Run Demo (Showcase Features)
+
+```bash
 python -m v2.main
 ```
 
-### 4. Use Agents
+### 5. Use Agents Programmatically
 
 ```python
 import asyncio

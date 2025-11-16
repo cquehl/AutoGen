@@ -10,6 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional, List, Dict, Literal
 from pathlib import Path
 from enum import Enum
+import os
 
 
 class ModelProvider(str, Enum):
@@ -476,9 +477,10 @@ class AppSettings(BaseSettings):
     )
 
     # Tool Configurations
-    shell: ShellConfig = Field(
+    shell_config: ShellConfig = Field(
         default_factory=ShellConfig,
-        description="Shell/bash tool configuration"
+        description="Shell/bash tool configuration",
+        alias="shell"
     )
     git: GitConfig = Field(
         default_factory=GitConfig,
@@ -579,8 +581,19 @@ class AppSettings(BaseSettings):
             ChatCompletionClient instance
         """
         from autogen_core.models import ChatCompletionClient
+        from autogen_ext.models.openai import OpenAIChatCompletionClient
 
         llm_config = self.get_llm_config(provider)
+
+        # For Azure, add model_info to avoid validation error
+        if provider == ModelProvider.AZURE or (provider is None and self.default_provider == ModelProvider.AZURE):
+            llm_config["model_info"] = {
+                "vision": True,
+                "function_calling": True,
+                "json_output": True,
+                "family": "gpt-4",
+                "structured_output": True,
+            }
 
         component_config = {
             "provider": "azure_openai_chat_completion_client",
@@ -603,7 +616,24 @@ def get_settings() -> AppSettings:
     """
     global _settings
     if _settings is None:
-        _settings = AppSettings()
+        # Temporarily remove conflicting environment variables
+        # Save original values
+        shell_backup = os.environ.get('SHELL')
+        allowed_ip_backup = os.environ.get('ALLOWED_IP')
+
+        # Remove them temporarily
+        os.environ.pop('SHELL', None)
+        os.environ.pop('ALLOWED_IP', None)
+
+        try:
+            _settings = AppSettings()
+        finally:
+            # Restore original values
+            if shell_backup:
+                os.environ['SHELL'] = shell_backup
+            if allowed_ip_backup:
+                os.environ['ALLOWED_IP'] = allowed_ip_backup
+
     return _settings
 
 
