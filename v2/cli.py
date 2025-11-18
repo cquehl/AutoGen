@@ -20,9 +20,16 @@ from autogen_agentchat.messages import TextMessage
 from autogen_agentchat.ui import Console as AutogenConsole
 
 from .core import get_container
+from .core.base_tool import ToolResult
 
+import logging
+
+# Constants
+DEFAULT_AGENT = "alfred"
+MAX_QUERY_LENGTH = 10000
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 def print_banner():
@@ -40,7 +47,7 @@ def print_banner():
 
 def print_alfred_greeting():
     """Print Alfred's initial greeting"""
-    greeting = """[bold white]Alfred:[/bold white] Good day, sir. Alfred at your service.
+    greeting = """[bold white]Alfred:[/bold white] Good day. Alfred at your service.
 How may I assist you today?
 
 [dim]I have comprehensive knowledge of the Yamazaki system and am ready to help:
@@ -49,7 +56,7 @@ How may I assist you today?
   • [bold]Switch agents[/bold] - "Use agent weather_agent" or /use_agent <name>
   • [bold]Get guidance[/bold] - Type "/help" for all commands[/dim]
 
-[cyan]Tip:[/cyan] [dim]I now understand natural language queries, sir. Just ask me anything![/dim]
+[cyan]Tip:[/cyan] [dim]I now understand natural language queries. Just ask me anything![/dim]
 """
     console.print(greeting)
 
@@ -203,7 +210,73 @@ def show_info():
     console.print(Panel(info_text, title="System Info", border_style="cyan"))
 
 
-def format_tool_result(result, prefix: str = "Alfred") -> str:
+def get_available_agents(container):
+    """
+    Get list of available agents from capability service.
+
+    Args:
+        container: Dependency injection container
+
+    Returns:
+        Tuple of (agents_list, agent_names_lowercase)
+    """
+    capability_service = container.get_capability_service()
+    agents = capability_service.get_agents()
+    agent_names = [a.get("name", "").lower() for a in agents]
+    return agents, agent_names
+
+
+def get_available_teams(container):
+    """
+    Get list of available teams from capability service.
+
+    Args:
+        container: Dependency injection container
+
+    Returns:
+        Tuple of (teams_list, team_names_lowercase)
+    """
+    capability_service = container.get_capability_service()
+    teams = capability_service.get_teams()
+    team_names = [t.get("name", "").lower() for t in teams]
+    return teams, team_names
+
+
+def extract_number_from_query(query: str, default: int = 5) -> int:
+    """
+    Extract a number from a query string.
+
+    Args:
+        query: User query string
+        default: Default value if no number found
+
+    Returns:
+        Extracted number or default
+    """
+    import re
+
+    # Try to find a number in the query
+    numbers = re.findall(r'\b(\d+)\b', query)
+    if numbers:
+        try:
+            return int(numbers[0])
+        except (ValueError, IndexError):
+            pass
+
+    # Check for word numbers
+    word_to_num = {
+        "five": 5, "ten": 10, "fifteen": 15, "twenty": 20,
+        "thirty": 30, "fifty": 50, "hundred": 100
+    }
+    query_lower = query.lower()
+    for word, num in word_to_num.items():
+        if word in query_lower:
+            return num
+
+    return default
+
+
+def format_tool_result(result: ToolResult, prefix: str = "Alfred") -> str:
     """
     Format a ToolResult for display in the CLI.
 
@@ -219,13 +292,13 @@ def format_tool_result(result, prefix: str = "Alfred") -> str:
 
     # If the result has a pre-formatted display string, use it
     if isinstance(result.data, dict) and "formatted" in result.data:
-        return f"[bold white]{prefix}:[/bold white] Certainly, sir.\n\n{result.data['formatted']}"
+        return f"[bold white]{prefix}:[/bold white] Certainly.\n\n{result.data['formatted']}"
 
     # Otherwise, try to display the raw data
     return f"[bold white]{prefix}:[/bold white] {result.data}"
 
 
-async def process_query(query: str, agent_name: str = "alfred") -> str:
+async def process_query(query: str, agent_name: str = DEFAULT_AGENT) -> dict:
     """
     Process user query using specified agent (defaults to Alfred).
 
@@ -234,69 +307,62 @@ async def process_query(query: str, agent_name: str = "alfred") -> str:
         agent_name: Name of agent to use (default: alfred)
 
     Returns:
-        Agent's response
+        Dict with 'response' (str) and optionally 'switch_to_agent' (str)
     """
+    # Input validation
+    if not query or not query.strip():
+        return {"response": ""}
+
+    query = query.strip()
+    if len(query) > MAX_QUERY_LENGTH:
+        return {
+            "response": f"[bold white]Alfred:[/bold white] I apologize, but that query is too long ({len(query)} characters). Please keep it under {MAX_QUERY_LENGTH} characters."
+        }
+
     container = get_container()
     tool_registry = container.get_tool_registry()
 
     try:
-        if agent_name == "alfred":
+        if agent_name == DEFAULT_AGENT:
             # Alfred: Detect intent and call appropriate tools
             query_lower = query.lower()
+            logger.info(f"Processing Alfred query: {query[:100]}...")
 
             # Pattern 1: Capabilities / "What can you do?"
-            if any(phrase in query_lower for phrase in [
-                "what can you do",
-                "what are you capable",
-                "list capabilities",
-                "show capabilities",
-                "what capabilities",
-                "what agents",
-                "list agents",
-                "show agents",
-                "what tools",
-                "list tools",
-                "show tools",
-                "what teams",
-                "list teams",
-                "show teams",
-            ]):
-                # Determine category
-                if "agent" in query_lower:
+            # More specific: must start with question words or have "list/show"
+            if any(query_lower.startswith(phrase) for phrase in ["what can", "what are", "list ", "show "]) or \
+               any(phrase in query_lower for phrase in ["list capabilities", "show capabilities", "what capabilities"]):
+
+                if any(word in query_lower for word in ["agent"]):
                     category = "agents"
-                elif "tool" in query_lower:
+                elif any(word in query_lower for word in ["tool"]):
                     category = "tools"
-                elif "team" in query_lower:
+                elif any(word in query_lower for word in ["team"]):
                     category = "teams"
                 else:
                     category = "all"
 
+                logger.info(f"Calling list_capabilities tool with category={category}")
                 tool = tool_registry.create_tool("alfred.list_capabilities")
                 result = await tool.execute(category=category)
-                return format_tool_result(result)
+                return {"response": format_tool_result(result)}
 
             # Pattern 2: History / "Show my actions"
+            # More specific: must mention "history" or "action" with relevant context
             elif any(phrase in query_lower for phrase in [
-                "history",
-                "last action",
-                "recent action",
-                "what did i",
-                "what have i",
-                "show my action",
-                "my recent",
+                "my history", "show history", "view history",
+                "my action", "last action", "recent action",
+                "what did i do", "what have i done",
             ]):
-                # Extract limit if mentioned
-                limit = 5
-                if "10" in query or "ten" in query_lower:
-                    limit = 10
-                elif "20" in query or "twenty" in query_lower:
-                    limit = 20
+                limit = extract_number_from_query(query, default=5)
+                limit = min(limit, 100)  # Cap at 100
 
+                logger.info(f"Calling show_history tool with limit={limit}")
                 tool = tool_registry.create_tool("alfred.show_history")
                 result = await tool.execute(scope="recent", limit=limit)
-                return format_tool_result(result)
+                return {"response": format_tool_result(result)}
 
-            # Pattern 3: Delegation / "Use weather team"
+            # Pattern 3: Delegation / "Delegate to team"
             elif any(phrase in query_lower for phrase in [
                 "delegate to",
                 "use team",
@@ -305,26 +371,32 @@ async def process_query(query: str, agent_name: str = "alfred") -> str:
                 "handoff to",
                 "switch to team",
             ]):
-                # Try to extract team name
-                team_name = None
-                for word in ["weather_team", "data_team", "magentic_one"]:
-                    if word in query_lower.replace(" ", "_"):
-                        team_name = word
+                # Dynamically fetch available teams
+                teams, team_names = get_available_teams(container)
+
+                # Try to extract team name from query
+                found_team = None
+                for team_info in teams:
+                    team_name_check = team_info.get("name", "").lower()
+                    if team_name_check in query_lower.replace(" ", "_"):
+                        found_team = team_info.get("name")
                         break
 
-                if team_name:
+                if found_team:
+                    logger.info(f"Calling delegate_to_team tool with team={found_team}")
                     tool = tool_registry.create_tool("alfred.delegate_to_team")
-                    result = await tool.execute(team_name=team_name, task=query)
-                    return format_tool_result(result)
+                    result = await tool.execute(team_name=found_team, task=query)
+                    return {"response": format_tool_result(result)}
                 else:
-                    return """[bold white]Alfred:[/bold white] I'd be delighted to delegate, sir, but I need to know which team.
+                    # Show available teams dynamically
+                    team_list = "\n  • ".join([t.get("name", "Unknown") for t in teams]) if teams else "None configured"
+                    example_team = teams[0].get('name', 'team_name') if teams else 'team_name'
+                    return {"response": f"""[bold white]Alfred:[/bold white] I'd be delighted to delegate, but I need to know which team.
 
 [bold cyan]Available teams:[/bold cyan]
-  • weather_team
-  • data_team
-  • magentic_one
+  • {team_list}
 
-[dim]Try: "Delegate to weather_team" or use /teams to see details.[/dim]"""
+[dim]Try: "Delegate to {example_team}" or use /teams to see details.[/dim]"""}
 
             # Pattern 4: Agent switching / "Use agent X"
             elif any(phrase in query_lower for phrase in [
@@ -333,11 +405,8 @@ async def process_query(query: str, agent_name: str = "alfred") -> str:
                 "work with agent",
                 "talk to agent",
             ]):
-                # Try to extract agent name from query
-                # First, get list of available agents
-                capability_service = container.get_capability_service()
-                agents = capability_service.get_agents()
-                agent_names = [a.get("name", "").lower() for a in agents]
+                # Get list of available agents
+                agents, agent_names = get_available_agents(container)
 
                 # Look for agent name in query
                 found_agent = None
@@ -348,29 +417,35 @@ async def process_query(query: str, agent_name: str = "alfred") -> str:
                         break
 
                 if found_agent:
-                    return f"""[bold white]Alfred:[/bold white] Very good, sir. I shall step aside.
+                    logger.info(f"Switching to agent: {found_agent}")
+                    return {
+                        "response": f"""[bold white]Alfred:[/bold white] Very good. I shall step aside.
 
-[green]Switching to: {found_agent}[/green]
+[green]✓ Switched to: {found_agent}[/green]
 
-[dim]Note: Direct agent interaction is being configured. For now, use /call_alfred to return.[/dim]"""
+[dim]You're now talking to {found_agent}. Use /call_alfred to return to me.[/dim]""",
+                        "switch_to_agent": found_agent.lower()
+                    }
                 else:
                     # Show available agents
-                    agent_list = "\n  • ".join([a.get("name", "Unknown") for a in agents])
-                    return f"""[bold white]Alfred:[/bold white] Which agent would you like to use, sir?
+                    agent_list = "\n  • ".join([a.get("name", "Unknown") for a in agents]) if agents else "None registered"
+                    example_agent = agents[0].get('name', 'agent_name') if agents else 'agent_name'
+                    return {"response": f"""[bold white]Alfred:[/bold white] Which agent would you like to use?
 
 [bold cyan]Available agents:[/bold cyan]
   • {agent_list}
 
-[dim]Try: "Use agent weather_agent" or use /agents to see full details.[/dim]"""
+[dim]Try: "Use agent {example_agent}" or /agents for details.[/dim]"""}
 
             # Pattern 5: Help request
             elif any(phrase in query_lower for phrase in ["help", "how do i", "how can i"]):
                 show_help()
-                return ""
+                return {"response": "[dim](Help displayed above)[/dim]"}
 
             # Pattern 6: No match - provide helpful suggestions
             else:
-                return f"""[bold white]Alfred:[/bold white] I'm not quite certain how to assist with: "{query}"
+                logger.info(f"No pattern matched for query: {query[:100]}")
+                return {"response": f"""[bold white]Alfred:[/bold white] I'm not quite certain how to assist with: "{query}"
 
 [bold cyan]💡 Here's what I can do for you:[/bold cyan]
   • [green]"What can you do?"[/green] - See all available agents, tools, and teams
@@ -378,26 +453,31 @@ async def process_query(query: str, agent_name: str = "alfred") -> str:
   • [green]"Delegate to weather_team"[/green] - Hand off to a specialist team
   • [green]"Use agent <name>"[/green] - Switch to a specific agent (try: /agents to see list)
 
-[cyan]Tip:[/cyan] [dim]Use /help to see all slash commands, sir.[/dim]"""
+[cyan]Tip:[/cyan] [dim]Use /help to see all slash commands.[/dim]"""}
 
         else:
             # Other agents: Placeholder for future direct agent interaction
-            return f"""[bold white]{agent_name.title()}:[/bold white] Task received: {query}
+            logger.info(f"Query passed to non-Alfred agent: {agent_name}")
+            return {"response": f"""[bold white]{agent_name.title()}:[/bold white] Task received: {query}
 
 [dim](Direct agent interaction is being configured. You'll soon execute tasks
 through specialist agents. For now, use Alfred as your interface.)[/dim]
 
-[cyan]Tip:[/cyan] Use [bold]/call_alfred[/bold] to return to Alfred."""
+[cyan]Tip:[/cyan] Use [bold]/call_alfred[/bold] to return to Alfred."""}
 
+    except ValueError as e:
+        logger.error(f"Validation error in process_query: {e}")
+        return {"response": f"[bold white]Alfred:[/bold white] I apologize, but there was an issue with your request: {str(e)}"}
     except Exception as e:
-        if agent_name == "alfred":
-            return f"""[bold white]Alfred:[/bold white] My apologies, sir. I've encountered an unexpected issue:
+        logger.error(f"Unexpected error in process_query: {e}", exc_info=True)
+        if agent_name == DEFAULT_AGENT:
+            return {"response": f"""[bold white]Alfred:[/bold white] My apologies. I've encountered an unexpected issue:
 
 [red]{str(e)}[/red]
 
-[dim]Please try again, or use /help to see available commands.[/dim]"""
+[dim]Please try again, or use /help to see available commands.[/dim]"""}
         else:
-            return f"[bold white]{agent_name.title()}:[/bold white] [red]Error: {str(e)}[/red]"
+            return {"response": f"[bold white]{agent_name.title()}:[/bold white] [red]Error: {str(e)}[/red]"}
 
 
 async def interactive_loop():
@@ -414,13 +494,13 @@ async def interactive_loop():
     obs.initialize()
 
     # Current agent mode (alfred is default)
-    current_agent = "alfred"
+    current_agent = DEFAULT_AGENT
 
     try:
         while True:
             try:
                 # Show prompt based on current agent
-                if current_agent == "alfred":
+                if current_agent == DEFAULT_AGENT:
                     console.print("\n[bold cyan]You[/bold cyan]: ", end="")
                 else:
                     console.print(f"\n[bold cyan]You[/bold cyan] [dim](via {current_agent})[/dim]: ", end="")
@@ -438,7 +518,7 @@ async def interactive_loop():
                     cmd = user_input.lower().strip()
 
                     if cmd in ["/exit", "/quit"]:
-                        console.print("\n[bold white]Alfred:[/bold white] Very good, sir. Until next time. 👋\n")
+                        console.print("\n[bold white]Alfred:[/bold white] Very good. Until next time. 👋\n")
                         break
                     elif cmd == "/help":
                         show_help()
@@ -451,24 +531,22 @@ async def interactive_loop():
                     elif cmd == "/info":
                         show_info()
                     elif cmd == "/call_alfred":
-                        if current_agent != "alfred":
-                            current_agent = "alfred"
-                            console.print("\n[bold white]Alfred:[/bold white] Welcome back, sir. How may I assist you further?")
+                        if current_agent != DEFAULT_AGENT:
+                            current_agent = DEFAULT_AGENT
+                            console.print("\n[bold white]Alfred:[/bold white] Welcome back. How may I assist you further?")
                         else:
-                            console.print("\n[bold white]Alfred:[/bold white] I'm already here, sir. At your service.")
+                            console.print("\n[bold white]Alfred:[/bold white] I'm already here. At your service.")
                     elif cmd.startswith("/use_agent"):
                         # Extract agent name from command
                         parts = user_input.split(maxsplit=1)
                         if len(parts) > 1:
                             requested_agent = parts[1].strip().lower()
-                            # Validate agent exists
-                            capability_service = container.get_capability_service()
-                            agents = capability_service.get_agents()
-                            agent_names = [a.get("name", "").lower() for a in agents]
+                            # Validate agent exists using helper function
+                            agents, agent_names = get_available_agents(container)
 
                             if requested_agent in agent_names:
                                 current_agent = requested_agent
-                                console.print(f"\n[bold white]Alfred:[/bold white] Very good, sir. Switching to [green]{requested_agent}[/green].")
+                                console.print(f"\n[bold white]Alfred:[/bold white] Very good. Switching to [green]{requested_agent}[/green].")
                                 console.print("[dim]Note: Direct agent interaction is being configured. Use /call_alfred to return.[/dim]")
                             else:
                                 console.print(f"[red]Agent '{requested_agent}' not found.[/red]")
@@ -481,7 +559,7 @@ async def interactive_loop():
                     elif cmd == "/clear":
                         console.clear()
                         print_banner()
-                        if current_agent == "alfred":
+                        if current_agent == DEFAULT_AGENT:
                             print_alfred_greeting()
                     else:
                         console.print(f"[red]Unknown command: {cmd}[/red]")
@@ -489,15 +567,22 @@ async def interactive_loop():
                 else:
                     # Process as query using current agent
                     with console.status("[bold green]Thinking...[/bold green]"):
-                        response = await process_query(user_input, current_agent)
+                        result = await process_query(user_input, current_agent)
 
-                    console.print(f"\n{response}")
+                    # Handle result (dict with 'response' and optionally 'switch_to_agent')
+                    if result.get("response"):
+                        console.print(f"\n{result['response']}")
+
+                    # Handle agent switching from natural language
+                    if "switch_to_agent" in result:
+                        current_agent = result["switch_to_agent"]
+                        logger.info(f"Switched to agent: {current_agent}")
 
             except KeyboardInterrupt:
-                console.print("\n\n[bold white]Alfred:[/bold white] Interrupted. Very good, sir. Exiting...")
+                console.print("\n\n[bold white]Alfred:[/bold white] Interrupted. Very good. Exiting...")
                 break
             except EOFError:
-                console.print("\n\n[bold white]Alfred:[/bold white] Until next time, sir. 👋")
+                console.print("\n\n[bold white]Alfred:[/bold white] Until next time. 👋")
                 break
 
     finally:
