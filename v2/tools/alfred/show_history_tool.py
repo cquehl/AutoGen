@@ -98,11 +98,14 @@ class ShowHistoryTool(BaseTool):
 
             else:
                 return ToolResult.error(
-                    f"Invalid scope '{scope}'. Must be: recent, session, or all"
+                    f"I'm afraid '{scope}' is not a valid scope, sir. "
+                    f"Please choose from: recent, session, or all."
                 )
 
         except Exception as e:
-            return ToolResult.error(f"Failed to show history: {str(e)}")
+            return ToolResult.error(
+                f"My apologies, sir. I encountered an issue while retrieving your history: {str(e)}"
+            )
 
     def validate_params(self, **kwargs) -> tuple[bool, Optional[str]]:
         """Validate parameters."""

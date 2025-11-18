@@ -210,19 +210,23 @@ class HistoryService:
 
         try:
             # Get events from message bus history
+            if not self.message_bus:
+                logger.warning("Message bus not available for history retrieval")
+                return events
+
             bus_events = self.message_bus.get_history(limit=limit)
 
             for event in bus_events:
                 events.append({
                     "type": "event",
-                    "event_type": event.event_type.value,
-                    "event_id": event.event_id,
-                    "timestamp": event.timestamp,
-                    "data": event.data,
+                    "event_type": event.event_type.value if hasattr(event, 'event_type') else "unknown",
+                    "event_id": getattr(event, 'event_id', 'unknown'),
+                    "timestamp": getattr(event, 'timestamp', datetime.now()),
+                    "data": getattr(event, 'data', {}),
                 })
 
         except Exception as e:
-            logger.error(f"Error accessing message bus events: {e}")
+            logger.error(f"Error accessing message bus events: {e}", exc_info=True)
 
         return events
 

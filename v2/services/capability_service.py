@@ -77,14 +77,15 @@ class CapabilityService:
 
             # Add configuration from settings if available
             agent_name = agent["name"]
-            if agent_name in self.settings.agents:
+            if hasattr(self.settings, 'agents') and agent_name in self.settings.agents:
                 config = self.settings.agents[agent_name]
                 agent_data["configured"] = True
-                agent_data["model_provider"] = config.model_provider
-                agent_data["temperature"] = config.temperature
-                agent_data["tools"] = config.tools or []
+                agent_data["model_provider"] = getattr(config, 'model_provider', 'unknown')
+                agent_data["temperature"] = getattr(config, 'temperature', 0.7)
+                agent_data["tools"] = getattr(config, 'tools', None) or []
             else:
                 agent_data["configured"] = False
+                agent_data["tools"] = []
 
             enriched_agents.append(agent_data)
 

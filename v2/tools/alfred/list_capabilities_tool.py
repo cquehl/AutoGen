@@ -83,11 +83,14 @@ class ListCapabilitiesTool(BaseTool):
 
             else:
                 return ToolResult.error(
-                    f"Invalid category '{category}'. Must be: all, agents, tools, or teams"
+                    f"I'm afraid '{category}' is not a valid category, sir. "
+                    f"Please choose from: all, agents, tools, or teams."
                 )
 
         except Exception as e:
-            return ToolResult.error(f"Failed to list capabilities: {str(e)}")
+            return ToolResult.error(
+                f"My apologies, sir. I encountered an issue while retrieving capabilities: {str(e)}"
+            )
 
     def _format_agents(self, agents: list) -> str:
         """Format agents for display."""

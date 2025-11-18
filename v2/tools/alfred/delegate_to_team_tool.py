@@ -56,13 +56,16 @@ class DelegateToTeamTool(BaseTool):
             available_teams = self.agent_factory.list_available_teams()
             if team_name not in available_teams:
                 return ToolResult.error(
-                    f"Team '{team_name}' not found. Available teams: {', '.join(available_teams)}"
+                    f"I'm afraid the '{team_name}' team is not available, sir. "
+                    f"Available teams: {', '.join(available_teams)}"
                 )
 
             # Get team details
             team_details = self.capability_service.get_team_details(team_name)
             if not team_details:
-                return ToolResult.error(f"Could not get details for team '{team_name}'")
+                return ToolResult.error(
+                    f"My apologies, sir. I could not retrieve details for the '{team_name}' team."
+                )
 
             # Prepare delegation message
             delegation_message = self._format_delegation_message(
@@ -84,7 +87,9 @@ class DelegateToTeamTool(BaseTool):
             })
 
         except Exception as e:
-            return ToolResult.error(f"Failed to delegate to team: {str(e)}")
+            return ToolResult.error(
+                f"My apologies, sir. I encountered an issue while delegating to the team: {str(e)}"
+            )
 
     def _format_delegation_message(
         self,

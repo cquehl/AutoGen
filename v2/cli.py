@@ -137,30 +137,37 @@ def show_tools():
 
 def show_teams():
     """Show all configured teams"""
-    container = get_container()
-    factory = container.get_agent_factory()
-    team_names = factory.list_available_teams()
+    try:
+        container = get_container()
+        factory = container.get_agent_factory()
+        team_names = factory.list_available_teams()
 
-    if not team_names:
-        console.print("[yellow]No teams configured yet[/yellow]")
-        return
+        if not team_names:
+            console.print("[yellow]No teams configured yet[/yellow]")
+            return
 
-    capability_service = container.get_capability_service()
-    teams = capability_service.get_teams()
+        capability_service = container.get_capability_service()
+        teams = capability_service.get_teams()
 
-    table = Table(title="Available Teams", border_style="cyan")
-    table.add_column("Name", style="bold cyan")
-    table.add_column("Agents", style="green")
-    table.add_column("Max Turns", style="yellow")
+        if not teams:
+            console.print("[yellow]No team details available[/yellow]")
+            return
 
-    for team in teams:
-        table.add_row(
-            team["name"],
-            ", ".join(team["agents"]),
-            str(team["max_turns"])
-        )
+        table = Table(title="Available Teams", border_style="cyan")
+        table.add_column("Name", style="bold cyan")
+        table.add_column("Agents", style="green")
+        table.add_column("Max Turns", style="yellow")
 
-    console.print(table)
+        for team in teams:
+            table.add_row(
+                team.get("name", "Unknown"),
+                ", ".join(team.get("agents", [])),
+                str(team.get("max_turns", "N/A"))
+            )
+
+        console.print(table)
+    except Exception as e:
+        console.print(f"[red]Error loading teams: {str(e)}[/red]")
 
 
 def show_info():
@@ -204,25 +211,39 @@ async def process_query(query: str, agent_name: str = "alfred") -> str:
         # For now, return a helpful message indicating Alfred is the interface
         # In full implementation, you'd run the agent with AutoGen's streaming
         if agent_name == "alfred":
-            return f"""[bold white]Alfred:[/bold white] {query}
+            return f"""[bold white]Alfred:[/bold white] Certainly, sir. Regarding: "{query}"
 
-[dim](Note: Alfred's conversational interface will be fully implemented in the next phase.
-For now, you can:
-  • Use /agents to see available agents
-  • Use /tools to see available tools
-  • Use /teams to see available teams
-  • Ask "What can you do?" to learn more)[/dim]
+[dim]I understand your request. However, my conversational capabilities are currently being enhanced.
+In the meantime, I remain at your service through these commands:[/dim]
 
-[bold]Available through Alfred:[/bold]
-  • Weather forecasting (weather_team)
-  • Data analysis (data_team)
-  • Complex multi-agent tasks (magentic_one)
+[bold cyan]Immediate Actions:[/bold cyan]
+  • [bold]/agents[/bold] - View all available agents
+  • [bold]/tools[/bold] - View all available tools
+  • [bold]/teams[/bold] - View configured teams
+  • [bold]/info[/bold] - System information
+
+[bold cyan]Available Capabilities:[/bold cyan]
+  • Weather forecasting via [green]weather_team[/green]
+  • Data analysis via [green]data_team[/green]
+  • Complex multi-agent workflows via [green]magentic_one[/green]
+
+[dim]The full conversational interface will be available shortly, sir.[/dim]
 """
         else:
-            return f"[Agent: {agent_name}] I would help you with: {query}\n\n(Note: Full agent execution will be implemented in the next version)"
+            return f"""[bold white]{agent_name.title()}:[/bold white] Task received: {query}
+
+[dim](Agent execution framework is being configured. You'll soon be able to interact
+with agents directly for task completion.)[/dim]"""
 
     except Exception as e:
-        return f"[red]Error: {str(e)}[/red]"
+        if agent_name == "alfred":
+            return f"""[bold white]Alfred:[/bold white] My apologies, sir. I've encountered an unexpected issue:
+
+[red]{str(e)}[/red]
+
+[dim]Please try again, or use /help to see available commands.[/dim]"""
+        else:
+            return f"[bold white]{agent_name.title()}:[/bold white] [red]Error: {str(e)}[/red]"
 
 
 async def interactive_loop():
