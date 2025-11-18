@@ -28,14 +28,27 @@ console = Console()
 def print_banner():
     """Print welcome banner"""
     banner = """
-🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃
-
-   YAMAZAKI V2 - Interactive CLI
-   Smooth, refined, production-ready
-
-🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃 🥃
+╔════════════════════════════════════════════════════════════╗
+║                                                            ║
+║         YAMAZAKI V2 - Alfred Concierge Service            ║
+║         Smooth, refined, production-ready                  ║
+║                                                            ║
+╚════════════════════════════════════════════════════════════╝
     """
     console.print(banner, style="bold cyan")
+
+
+def print_alfred_greeting():
+    """Print Alfred's initial greeting"""
+    greeting = """[bold white]Alfred:[/bold white] Good day, sir. Alfred at your service.
+How may I assist you today?
+
+[dim]I oversee the Yamazaki system and can help you with:
+  • Explaining available capabilities (/help)
+  • Showing your recent actions (just ask!)
+  • Delegating tasks to specialist teams[/dim]
+"""
+    console.print(greeting)
 
 
 def show_help():
@@ -43,27 +56,31 @@ def show_help():
     help_text = """
 [bold cyan]Available Commands:[/bold cyan]
 
-  [bold]/help[/bold]       - Show this help message
-  [bold]/agents[/bold]     - List all available agents
-  [bold]/tools[/bold]      - List all available tools
-  [bold]/info[/bold]       - Show system information
-  [bold]/clear[/bold]      - Clear the screen
-  [bold]/exit[/bold]       - Exit the CLI
-  [bold]/quit[/bold]       - Exit the CLI
+  [bold]/help[/bold]         - Show this help message
+  [bold]/agents[/bold]       - List all available agents
+  [bold]/tools[/bold]        - List all available tools
+  [bold]/teams[/bold]        - List all available teams
+  [bold]/info[/bold]         - Show system information
+  [bold]/call_alfred[/bold]  - Return to Alfred (use during team interactions)
+  [bold]/clear[/bold]        - Clear the screen
+  [bold]/exit[/bold]         - Exit the CLI
+  [bold]/quit[/bold]         - Exit the CLI
 
 [bold cyan]How to Use:[/bold cyan]
 
-  1. Just type your question or request
-  2. The system will select the best agent for your task
-  3. Use /agents to see what each agent can do
+  1. Alfred is your primary interface - just ask him anything!
+  2. He can explain capabilities, show history, and delegate to teams
+  3. When delegated to a team, use /call_alfred to return to Alfred
+  4. Use /agents and /tools to see what's available
 
 [bold cyan]Examples:[/bold cyan]
 
-  • "What's the weather in Seattle?"
   • "What can you do?"
-  • "List all available agents"
+  • "What were my last actions?"
+  • "Analyze the weather in Seattle"
+  • "Show me available teams"
     """
-    console.print(Panel(help_text, title="Help", border_style="cyan"))
+    console.print(Panel(help_text, title="Alfred's Help", border_style="cyan"))
 
 
 def show_agents():
@@ -118,6 +135,34 @@ def show_tools():
     console.print(table)
 
 
+def show_teams():
+    """Show all configured teams"""
+    container = get_container()
+    factory = container.get_agent_factory()
+    team_names = factory.list_available_teams()
+
+    if not team_names:
+        console.print("[yellow]No teams configured yet[/yellow]")
+        return
+
+    capability_service = container.get_capability_service()
+    teams = capability_service.get_teams()
+
+    table = Table(title="Available Teams", border_style="cyan")
+    table.add_column("Name", style="bold cyan")
+    table.add_column("Agents", style="green")
+    table.add_column("Max Turns", style="yellow")
+
+    for team in teams:
+        table.add_row(
+            team["name"],
+            ", ".join(team["agents"]),
+            str(team["max_turns"])
+        )
+
+    console.print(table)
+
+
 def show_info():
     """Show system information"""
     container = get_container()
@@ -138,12 +183,13 @@ def show_info():
     console.print(Panel(info_text, title="System Info", border_style="cyan"))
 
 
-async def process_query(query: str) -> str:
+async def process_query(query: str, agent_name: str = "alfred") -> str:
     """
-    Process user query by selecting appropriate agent and running it.
+    Process user query using specified agent (defaults to Alfred).
 
     Args:
         query: User's question or request
+        agent_name: Name of agent to use (default: alfred)
 
     Returns:
         Agent's response
@@ -151,25 +197,29 @@ async def process_query(query: str) -> str:
     container = get_container()
     factory = container.get_agent_factory()
 
-    # Simple agent selection logic
-    # In a real implementation, you'd use an orchestrator agent
-    query_lower = query.lower()
-
-    if any(word in query_lower for word in ["weather", "forecast", "temperature", "rain"]):
-        agent_name = "weather"
-    elif any(word in query_lower for word in ["database", "query", "data", "sql", "analyze"]):
-        agent_name = "data_analyst"
-    else:
-        # Default to orchestrator for general queries
-        agent_name = "orchestrator"
-
     try:
-        # Create agent
+        # Create the agent
         agent = factory.create(agent_name)
 
-        # For now, just return a helpful message
-        # In full implementation, you'd actually run the agent with a team
-        return f"[Agent: {agent_name}] I would help you with: {query}\n\n(Note: Full agent execution will be implemented in the next version)"
+        # For now, return a helpful message indicating Alfred is the interface
+        # In full implementation, you'd run the agent with AutoGen's streaming
+        if agent_name == "alfred":
+            return f"""[bold white]Alfred:[/bold white] {query}
+
+[dim](Note: Alfred's conversational interface will be fully implemented in the next phase.
+For now, you can:
+  • Use /agents to see available agents
+  • Use /tools to see available tools
+  • Use /teams to see available teams
+  • Ask "What can you do?" to learn more)[/dim]
+
+[bold]Available through Alfred:[/bold]
+  • Weather forecasting (weather_team)
+  • Data analysis (data_team)
+  • Complex multi-agent tasks (magentic_one)
+"""
+        else:
+            return f"[Agent: {agent_name}] I would help you with: {query}\n\n(Note: Full agent execution will be implemented in the next version)"
 
     except Exception as e:
         return f"[red]Error: {str(e)}[/red]"
@@ -178,9 +228,9 @@ async def process_query(query: str) -> str:
 async def interactive_loop():
     """Main interactive loop"""
     print_banner()
+    print_alfred_greeting()
 
-    console.print("\n[bold green]Welcome to Yamazaki V2![/bold green]")
-    console.print("Type [bold]/help[/bold] for available commands, or just ask me anything!\n")
+    console.print("\n[dim]Type [bold]/help[/bold] for available commands, or just ask Alfred anything![/dim]")
     console.print("[dim]Tip: Press Ctrl+C to exit[/dim]\n")
 
     # Initialize container
@@ -188,11 +238,18 @@ async def interactive_loop():
     obs = container.get_observability_manager()
     obs.initialize()
 
+    # Current agent mode (alfred is default)
+    current_agent = "alfred"
+
     try:
         while True:
             try:
-                # Get user input using input() instead of rich Prompt to handle Ctrl+C properly
-                console.print("\n[bold cyan]You[/bold cyan]: ", end="")
+                # Show prompt based on current agent
+                if current_agent == "alfred":
+                    console.print("\n[bold cyan]You[/bold cyan]: ", end="")
+                else:
+                    console.print(f"\n[bold cyan]You[/bold cyan] [dim](via {current_agent})[/dim]: ", end="")
+
                 user_input = input()
 
                 # Strip whitespace early
@@ -206,7 +263,7 @@ async def interactive_loop():
                     cmd = user_input.lower().strip()
 
                     if cmd in ["/exit", "/quit"]:
-                        console.print("\n[bold yellow]Goodbye! 👋[/bold yellow]\n")
+                        console.print("\n[bold white]Alfred:[/bold white] Very good, sir. Until next time. 👋\n")
                         break
                     elif cmd == "/help":
                         show_help()
@@ -214,26 +271,36 @@ async def interactive_loop():
                         show_agents()
                     elif cmd == "/tools":
                         show_tools()
+                    elif cmd == "/teams":
+                        show_teams()
                     elif cmd == "/info":
                         show_info()
+                    elif cmd == "/call_alfred":
+                        if current_agent != "alfred":
+                            current_agent = "alfred"
+                            console.print("\n[bold white]Alfred:[/bold white] Welcome back, sir. How may I assist you further?")
+                        else:
+                            console.print("\n[bold white]Alfred:[/bold white] I'm already here, sir. At your service.")
                     elif cmd == "/clear":
                         console.clear()
                         print_banner()
+                        if current_agent == "alfred":
+                            print_alfred_greeting()
                     else:
                         console.print(f"[red]Unknown command: {cmd}[/red]")
                         console.print("Type [bold]/help[/bold] for available commands")
                 else:
-                    # Process as query
+                    # Process as query using current agent
                     with console.status("[bold green]Thinking...[/bold green]"):
-                        response = await process_query(user_input)
+                        response = await process_query(user_input, current_agent)
 
-                    console.print(f"\n[bold green]Yamazaki[/bold green]: {response}")
+                    console.print(f"\n{response}")
 
             except KeyboardInterrupt:
-                console.print("\n\n[bold yellow]Interrupted. Exiting...[/bold yellow]")
+                console.print("\n\n[bold white]Alfred:[/bold white] Interrupted. Very good, sir. Exiting...")
                 break
             except EOFError:
-                console.print("\n\n[bold yellow]Goodbye! 👋[/bold yellow]")
+                console.print("\n\n[bold white]Alfred:[/bold white] Until next time, sir. 👋")
                 break
 
     finally:
