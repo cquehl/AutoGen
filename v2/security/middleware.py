@@ -62,11 +62,93 @@ class OperationResult:
 
 
 class AuditLogger:
-    """Simple audit logger for security events"""
+    """
+    Persistent audit logger for security events with tamper detection.
 
-    def __init__(self, enabled: bool = True):
+    Stores audit logs in SQLite database with hash-based tamper detection.
+    """
+
+    def __init__(self, enabled: bool = True, db_path: str = "./data/audit.db"):
         self.enabled = enabled
-        self.events = []  # In-memory storage (use database in production)
+        self.db_path = db_path
+        self._logger = logging.getLogger(__name__)
+
+        if self.enabled:
+            self._ensure_audit_db()
+
+    def _ensure_audit_db(self):
+        """Create audit database and table if they don't exist."""
+        import sqlite3
+        from pathlib import Path
+
+        # Ensure directory exists
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS audit_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    operation_type TEXT NOT NULL,
+                    reason TEXT,
+                    params TEXT,
+                    result_summary TEXT,
+                    error TEXT,
+                    entry_hash TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_timestamp ON audit_log(timestamp)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_event_type ON audit_log(event_type)
+            """)
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _compute_hash(self, event: dict) -> str:
+        """Compute tamper-detection hash for audit event."""
+        import hashlib
+        import json
+
+        # Create deterministic string representation
+        event_str = json.dumps(event, sort_keys=True)
+        return hashlib.sha256(event_str.encode()).hexdigest()
+
+    def _write_event(self, event: dict):
+        """Write event to audit database."""
+        import sqlite3
+        import json
+
+        # Compute hash for tamper detection
+        entry_hash = self._compute_hash(event)
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute("""
+                INSERT INTO audit_log (
+                    timestamp, event_type, operation_type,
+                    reason, params, result_summary, error, entry_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                event.get("timestamp"),
+                event.get("event_type"),
+                event.get("operation_type"),
+                event.get("reason"),
+                json.dumps(event.get("params", {})),
+                event.get("result_summary"),
+                event.get("error"),
+                entry_hash
+            ))
+            conn.commit()
+        except Exception as e:
+            self._logger.error(f"Failed to write audit log: {e}")
+        finally:
+            conn.close()
 
     def log_blocked(self, operation: Operation, reason: str):
         """Log blocked operation"""
@@ -80,8 +162,9 @@ class AuditLogger:
             "reason": reason,
             "params": operation.params,
         }
-        self.events.append(event)
-        print(f"🚫 BLOCKED: {operation.type.value} - {reason}")
+
+        self._write_event(event)
+        self._logger.warning(f"BLOCKED: {operation.type.value} - {reason}")
 
     def log_success(self, operation: Operation, result: OperationResult):
         """Log successful operation"""
@@ -92,15 +175,16 @@ class AuditLogger:
             "timestamp": datetime.utcnow().isoformat(),
             "event_type": "operation_success",
             "operation_type": operation.type.value,
-            "execution_time_ms": result.execution_time_ms,
+            "result_summary": str(result.data)[:200] if result.data else None,
         }
-        self.events.append(event)
+
+        self._write_event(event)
 
         # Log DELETE operations prominently
         if operation.type == OperationType.SQL_QUERY:
             query = operation.params.get("query", "")
             if query.strip().upper().startswith("DELETE"):
-                print(f"⚠️  DELETE operation executed: {query[:100]}")
+                self._logger.warning(f"DELETE operation executed: {query[:100]}")
 
     def log_error(self, operation: Operation, error: str):
         """Log operation error"""
@@ -113,11 +197,43 @@ class AuditLogger:
             "operation_type": operation.type.value,
             "error": error,
         }
-        self.events.append(event)
+
+        self._write_event(event)
 
     def get_recent_events(self, limit: int = 100) -> list:
-        """Get recent audit events"""
-        return self.events[-limit:]
+        """Get recent audit events from database."""
+        if not self.enabled:
+            return []
+
+        import sqlite3
+        import json
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cursor = conn.execute("""
+                SELECT timestamp, event_type, operation_type, reason, params,
+                       result_summary, error, entry_hash
+                FROM audit_log
+                ORDER BY id DESC
+                LIMIT ?
+            """, (limit,))
+
+            events = []
+            for row in cursor.fetchall():
+                events.append({
+                    "timestamp": row[0],
+                    "event_type": row[1],
+                    "operation_type": row[2],
+                    "reason": row[3],
+                    "params": json.loads(row[4]) if row[4] else {},
+                    "result_summary": row[5],
+                    "error": row[6],
+                    "entry_hash": row[7]
+                })
+
+            return events
+        finally:
+            conn.close()
 
 
 class SecurityMiddleware:

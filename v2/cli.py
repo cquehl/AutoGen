@@ -8,6 +8,7 @@ Interactive command-line interface for chatting with agents.
 import asyncio
 import sys
 import signal
+import logging
 from typing import Optional
 
 from rich.console import Console
@@ -23,6 +24,7 @@ from .core import get_container
 
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 def print_banner():
@@ -56,6 +58,9 @@ def show_help():
   1. Just type your question or request
   2. The system will select the best agent for your task
   3. Use /agents to see what each agent can do
+
+[bold yellow]Note:[/bold yellow] Agent execution is currently in preview mode.
+Full LLM-powered responses will be available in the next release.
 
 [bold cyan]Examples:[/bold cyan]
 
@@ -148,6 +153,14 @@ async def process_query(query: str) -> str:
     Returns:
         Agent's response
     """
+    # Input validation
+    MAX_QUERY_LENGTH = 10000
+    if len(query) > MAX_QUERY_LENGTH:
+        return f"[yellow]Query too long (max {MAX_QUERY_LENGTH} chars). Please shorten your request.[/yellow]"
+
+    if not query.strip():
+        return "[yellow]Please enter a valid query.[/yellow]"
+
     container = get_container()
     factory = container.get_agent_factory()
 
@@ -169,10 +182,20 @@ async def process_query(query: str) -> str:
 
         # For now, just return a helpful message
         # In full implementation, you'd actually run the agent with a team
-        return f"[Agent: {agent_name}] I would help you with: {query}\n\n(Note: Full agent execution will be implemented in the next version)"
+        return f"[bold cyan]Agent Selected:[/bold cyan] {agent_name}\n[bold green]Preview Response:[/bold green] I would help you with: {query}\n\n[dim]Note: Full LLM execution coming in next release. Agent routing is working correctly.[/dim]"
 
+    except ValueError as e:
+        # Configuration or validation errors
+        return f"[red]Configuration error: {str(e)}[/red]\n[dim]Use /info to check system status[/dim]"
+    except KeyError as e:
+        # Agent not found
+        return f"[red]Agent not found: {str(e)}[/red]\n[dim]Use /agents to see available agents[/dim]"
     except Exception as e:
-        return f"[red]Error: {str(e)}[/red]"
+        # Unexpected errors - log but don't expose details
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Unexpected error processing query: {e}", exc_info=True)
+        return "[red]An unexpected error occurred. Please try again or contact support.[/red]"
 
 
 async def interactive_loop():
@@ -181,6 +204,7 @@ async def interactive_loop():
 
     console.print("\n[bold green]Welcome to Yamazaki V2![/bold green]")
     console.print("Type [bold]/help[/bold] for available commands, or just ask me anything!\n")
+    console.print("[bold yellow]Preview Mode:[/bold yellow] Agent routing is active. Full execution coming soon.\n")
     console.print("[dim]Tip: Press Ctrl+C to exit[/dim]\n")
 
     # Initialize container
@@ -188,8 +212,21 @@ async def interactive_loop():
     obs = container.get_observability_manager()
     obs.initialize()
 
+    # Setup signal handlers for graceful shutdown
+    loop = asyncio.get_event_loop()
+    shutdown_event = asyncio.Event()
+
+    def signal_handler(signum):
+        """Handle shutdown signals gracefully."""
+        logger.info(f"Received signal {signum}, initiating graceful shutdown")
+        shutdown_event.set()
+
+    # Register handlers for SIGTERM and SIGINT
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, lambda s=sig: signal_handler(s))
+
     try:
-        while True:
+        while not shutdown_event.is_set():
             try:
                 # Get user input using input() instead of rich Prompt to handle Ctrl+C properly
                 console.print("\n[bold cyan]You[/bold cyan]: ", end="")
@@ -231,14 +268,20 @@ async def interactive_loop():
 
             except KeyboardInterrupt:
                 console.print("\n\n[bold yellow]Interrupted. Exiting...[/bold yellow]")
-                break
+                shutdown_event.set()
             except EOFError:
                 console.print("\n\n[bold yellow]Goodbye! 👋[/bold yellow]")
-                break
+                shutdown_event.set()
+
+        # Shutdown signal received
+        if shutdown_event.is_set():
+            console.print("\n[bold yellow]Shutting down gracefully...[/bold yellow]")
 
     finally:
         # Cleanup
+        logger.info("Disposing container and cleaning up resources")
         await container.dispose()
+        logger.info("Shutdown complete")
 
 
 def main():
