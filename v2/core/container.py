@@ -274,6 +274,35 @@ class Container:
 
         return self._singletons["vision_service"]
 
+    def get_capability_service(self):
+        """
+        Get capability service (singleton).
+
+        Provides access to system capabilities (agents, tools, teams).
+
+        Returns:
+            CapabilityService instance
+        """
+        if "capability_service" not in self._singletons:
+            from ..services.capability_service import CapabilityService
+
+            # Get registries
+            agent_registry = self.get_agent_registry()
+            tool_registry = self.get_tool_registry()
+
+            # Create capability service
+            capability_service = CapabilityService(
+                agent_registry=agent_registry,
+                tool_registry=tool_registry,
+            )
+
+            # Set capability_service on tool_registry for META tools
+            tool_registry.capability_service = capability_service
+
+            self._singletons["capability_service"] = capability_service
+
+        return self._singletons["capability_service"]
+
     async def dispose(self):
         """
         Dispose of all resources and cleanup.

@@ -18,16 +18,18 @@ class ToolRegistry:
     Provides plugin-based tool discovery, loading, and management.
     """
 
-    def __init__(self, security_middleware, connection_pool):
+    def __init__(self, security_middleware, connection_pool, capability_service=None):
         """
         Initialize tool registry.
 
         Args:
             security_middleware: Security middleware for validation
             connection_pool: Database connection pool manager
+            capability_service: Capability service for META tools (optional, lazily set)
         """
         self.security_middleware = security_middleware
         self.connection_pool = connection_pool
+        self.capability_service = capability_service
         self._tools: Dict[str, ToolMetadata] = {}
         self._tool_instances: Dict[str, BaseTool] = {}
 
@@ -128,6 +130,15 @@ class ToolRegistry:
         # Inject connection pool for database tools
         if metadata.category == ToolCategory.DATABASE:
             tool_kwargs["connection_pool"] = self.connection_pool
+
+        # Inject capability service for META tools
+        if metadata.category == ToolCategory.META:
+            if self.capability_service is None:
+                raise ValueError(
+                    f"Tool '{name}' requires capability_service but it is not set. "
+                    "This usually happens when the tool registry is initialized before the container is fully set up."
+                )
+            tool_kwargs["capability_service"] = self.capability_service
 
         # Create tool instance
         tool = metadata.tool_class(**tool_kwargs)
