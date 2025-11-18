@@ -43,13 +43,13 @@ def print_alfred_greeting():
     greeting = """[bold white]Alfred:[/bold white] Good day, sir. Alfred at your service.
 How may I assist you today?
 
-[dim]I have comprehensive knowledge of the Yamazaki system and can presently:
-  • [bold]List capabilities[/bold] - Try: "/agents" or "/tools" or "/teams"
-  • [bold]Show your history[/bold] - Ask me: "What were my last actions?"
-  • [bold]Explain what's available[/bold] - Ask: "What can you do?"
-  • [bold]Provide guidance[/bold] - Use "/help" for all commands[/dim]
+[dim]I have comprehensive knowledge of the Yamazaki system and am ready to help:
+  • [bold]Ask in plain English[/bold] - "What can you do?" "Show my last actions"
+  • [bold]View system info[/bold] - Use "/agents" "/tools" or "/teams"
+  • [bold]Switch agents[/bold] - "Use agent weather_agent" or /use_agent <name>
+  • [bold]Get guidance[/bold] - Type "/help" for all commands[/dim]
 
-[cyan]Tip:[/cyan] [dim]Just ask me questions in plain English, or use slash commands above.[/dim]
+[cyan]Tip:[/cyan] [dim]I now understand natural language queries, sir. Just ask me anything![/dim]
 """
     console.print(greeting)
 
@@ -59,35 +59,39 @@ def show_help():
     help_text = """
 [bold cyan]📋 Slash Commands:[/bold cyan]
 
-  [bold]/help[/bold]         - Show this help message
-  [bold]/agents[/bold]       - List all available agents (Weather, Data Analyst, etc.)
-  [bold]/tools[/bold]        - List all available tools (database, file, weather)
-  [bold]/teams[/bold]        - List configured teams (weather_team, data_team, magentic_one)
-  [bold]/info[/bold]         - Show system information and status
-  [bold]/call_alfred[/bold]  - Return to Alfred (when working with a team)
-  [bold]/clear[/bold]        - Clear the screen and reset view
-  [bold]/exit, /quit[/bold]  - Exit the CLI
+  [bold]/help[/bold]              - Show this help message
+  [bold]/agents[/bold]            - List all available agents (Weather, Data Analyst, etc.)
+  [bold]/tools[/bold]             - List all available tools (database, file, weather)
+  [bold]/teams[/bold]             - List configured teams (weather_team, data_team, magentic_one)
+  [bold]/use_agent <name>[/bold]  - Switch to a specific agent explicitly
+  [bold]/call_alfred[/bold]       - Return to Alfred (when working with another agent)
+  [bold]/info[/bold]              - Show system information and status
+  [bold]/clear[/bold]             - Clear the screen and reset view
+  [bold]/exit, /quit[/bold]       - Exit the CLI
 
 [bold cyan]💬 Talking to Alfred:[/bold cyan]
 
-Alfred can answer questions right now using his three specialized tools:
-  • [green]list_capabilities[/green] - "What agents are available?" "Show me tools"
-  • [green]show_history[/green] - "What were my last 5 actions?" "Show session history"
-  • [green]delegate_to_team[/green] - "Delegate weather analysis to weather_team"
+Alfred now responds to natural language! He uses his three specialized tools:
+  • [green]list_capabilities[/green] - Shows agents, tools, teams
+  • [green]show_history[/green] - Displays recent actions and session history
+  • [green]delegate_to_team[/green] - Hands off tasks to specialist teams
 
 [bold cyan]📝 Example Queries:[/bold cyan]
 
-  [dim]Try these with Alfred:[/dim]
-  • "What can you do?"
-  • "List all available agents"
-  • "Show me my last 10 actions"
-  • "What teams are configured?"
+  [dim]These actually work now - try them![/dim]
+  • "What can you do?" → [dim]Lists all capabilities[/dim]
+  • "List all available agents" → [dim]Shows registered agents[/dim]
+  • "Show me my last 10 actions" → [dim]Displays recent history[/dim]
+  • "What teams are configured?" → [dim]Lists available teams[/dim]
+  • "Use agent weather_agent" → [dim]Switches to that agent[/dim]
+  • "Delegate to weather_team" → [dim]Hands off to specialist team[/dim]
 
 [bold cyan]🔄 Workflow:[/bold cyan]
 
-  1. Start → Talk to Alfred (he'll use his tools to help)
-  2. When ready → Alfred delegates to specialist teams
-  3. Working with team → Use [bold]/call_alfred[/bold] to return
+  1. Start → Talk to Alfred (natural language or slash commands)
+  2. Ask Alfred → He'll use his tools to answer or help
+  3. Switch agents → Use "Use agent X" or /use_agent X
+  4. Return to Alfred → Use /call_alfred or just ask for him
     """
     console.print(Panel(help_text, title="🎩 Alfred's Concierge Help", border_style="cyan"))
 
@@ -199,6 +203,28 @@ def show_info():
     console.print(Panel(info_text, title="System Info", border_style="cyan"))
 
 
+def format_tool_result(result, prefix: str = "Alfred") -> str:
+    """
+    Format a ToolResult for display in the CLI.
+
+    Args:
+        result: ToolResult from tool execution
+        prefix: Name prefix for display (e.g., "Alfred")
+
+    Returns:
+        Formatted string for console display
+    """
+    if not result.success:
+        return f"[bold white]{prefix}:[/bold white] {result.error}"
+
+    # If the result has a pre-formatted display string, use it
+    if isinstance(result.data, dict) and "formatted" in result.data:
+        return f"[bold white]{prefix}:[/bold white] Certainly, sir.\n\n{result.data['formatted']}"
+
+    # Otherwise, try to display the raw data
+    return f"[bold white]{prefix}:[/bold white] {result.data}"
+
+
 async def process_query(query: str, agent_name: str = "alfred") -> str:
     """
     Process user query using specified agent (defaults to Alfred).
@@ -211,34 +237,151 @@ async def process_query(query: str, agent_name: str = "alfred") -> str:
         Agent's response
     """
     container = get_container()
-    factory = container.get_agent_factory()
+    tool_registry = container.get_tool_registry()
 
     try:
-        # Create the agent
-        agent = factory.create(agent_name)
-
-        # For now, return a helpful message indicating Alfred is the interface
-        # In full implementation, you'd run the agent with AutoGen's streaming
         if agent_name == "alfred":
-            return f"""[bold white]Alfred:[/bold white] Certainly, sir. Regarding: "{query}"
+            # Alfred: Detect intent and call appropriate tools
+            query_lower = query.lower()
 
-[dim]I'm currently interfacing with my full conversational capabilities.
-For immediate assistance, I can help through these specific methods:[/dim]
+            # Pattern 1: Capabilities / "What can you do?"
+            if any(phrase in query_lower for phrase in [
+                "what can you do",
+                "what are you capable",
+                "list capabilities",
+                "show capabilities",
+                "what capabilities",
+                "what agents",
+                "list agents",
+                "show agents",
+                "what tools",
+                "list tools",
+                "show tools",
+                "what teams",
+                "list teams",
+                "show teams",
+            ]):
+                # Determine category
+                if "agent" in query_lower:
+                    category = "agents"
+                elif "tool" in query_lower:
+                    category = "tools"
+                elif "team" in query_lower:
+                    category = "teams"
+                else:
+                    category = "all"
 
-[bold cyan]🔍 Try These Commands:[/bold cyan]
-  • [bold]/agents[/bold] - See: Weather Agent, Data Analyst, Orchestrator, Web Surfer
-  • [bold]/tools[/bold] - View: database queries, file operations, weather forecasts
-  • [bold]/teams[/bold] - Explore: weather_team, data_team, magentic_one
-  • [bold]/help[/bold] - Full guide to working with Alfred
+                tool = tool_registry.create_tool("alfred.list_capabilities")
+                result = await tool.execute(category=category)
+                return format_tool_result(result)
 
-[bold cyan]💡 Example Queries I Can Handle:[/bold cyan]
-  • "List all available agents" → [dim]Uses my list_capabilities tool[/dim]
-  • "Show my last 5 actions" → [dim]Uses my show_history tool[/dim]
-  • "What teams are configured?" → [dim]Uses my list_capabilities tool[/dim]
+            # Pattern 2: History / "Show my actions"
+            elif any(phrase in query_lower for phrase in [
+                "history",
+                "last action",
+                "recent action",
+                "what did i",
+                "what have i",
+                "show my action",
+                "my recent",
+            ]):
+                # Extract limit if mentioned
+                limit = 5
+                if "10" in query or "ten" in query_lower:
+                    limit = 10
+                elif "20" in query or "twenty" in query_lower:
+                    limit = 20
 
-[cyan]Tip:[/cyan] [dim]Use the slash commands above for immediate results, sir.[/dim]
-"""
+                tool = tool_registry.create_tool("alfred.show_history")
+                result = await tool.execute(scope="recent", limit=limit)
+                return format_tool_result(result)
+
+            # Pattern 3: Delegation / "Use weather team"
+            elif any(phrase in query_lower for phrase in [
+                "delegate to",
+                "use team",
+                "use the team",
+                "hand off to",
+                "handoff to",
+                "switch to team",
+            ]):
+                # Try to extract team name
+                team_name = None
+                for word in ["weather_team", "data_team", "magentic_one"]:
+                    if word in query_lower.replace(" ", "_"):
+                        team_name = word
+                        break
+
+                if team_name:
+                    tool = tool_registry.create_tool("alfred.delegate_to_team")
+                    result = await tool.execute(team_name=team_name, task=query)
+                    return format_tool_result(result)
+                else:
+                    return """[bold white]Alfred:[/bold white] I'd be delighted to delegate, sir, but I need to know which team.
+
+[bold cyan]Available teams:[/bold cyan]
+  • weather_team
+  • data_team
+  • magentic_one
+
+[dim]Try: "Delegate to weather_team" or use /teams to see details.[/dim]"""
+
+            # Pattern 4: Agent switching / "Use agent X"
+            elif any(phrase in query_lower for phrase in [
+                "use agent",
+                "switch to agent",
+                "work with agent",
+                "talk to agent",
+            ]):
+                # Try to extract agent name from query
+                # First, get list of available agents
+                capability_service = container.get_capability_service()
+                agents = capability_service.get_agents()
+                agent_names = [a.get("name", "").lower() for a in agents]
+
+                # Look for agent name in query
+                found_agent = None
+                for agent_info in agents:
+                    agent_name_check = agent_info.get("name", "").lower()
+                    if agent_name_check in query_lower:
+                        found_agent = agent_info.get("name")
+                        break
+
+                if found_agent:
+                    return f"""[bold white]Alfred:[/bold white] Very good, sir. I shall step aside.
+
+[green]Switching to: {found_agent}[/green]
+
+[dim]Note: Direct agent interaction is being configured. For now, use /call_alfred to return.[/dim]"""
+                else:
+                    # Show available agents
+                    agent_list = "\n  • ".join([a.get("name", "Unknown") for a in agents])
+                    return f"""[bold white]Alfred:[/bold white] Which agent would you like to use, sir?
+
+[bold cyan]Available agents:[/bold cyan]
+  • {agent_list}
+
+[dim]Try: "Use agent weather_agent" or use /agents to see full details.[/dim]"""
+
+            # Pattern 5: Help request
+            elif any(phrase in query_lower for phrase in ["help", "how do i", "how can i"]):
+                show_help()
+                return ""
+
+            # Pattern 6: No match - provide helpful suggestions
+            else:
+                return f"""[bold white]Alfred:[/bold white] I'm not quite certain how to assist with: "{query}"
+
+[bold cyan]💡 Here's what I can do for you:[/bold cyan]
+  • [green]"What can you do?"[/green] - See all available agents, tools, and teams
+  • [green]"Show my last 10 actions"[/green] - View your recent history
+  • [green]"Delegate to weather_team"[/green] - Hand off to a specialist team
+  • [green]"Use agent <name>"[/green] - Switch to a specific agent (try: /agents to see list)
+
+[cyan]Tip:[/cyan] [dim]Use /help to see all slash commands, sir.[/dim]"""
+
         else:
+            # Other agents: Placeholder for future direct agent interaction
             return f"""[bold white]{agent_name.title()}:[/bold white] Task received: {query}
 
 [dim](Direct agent interaction is being configured. You'll soon execute tasks
@@ -313,6 +456,28 @@ async def interactive_loop():
                             console.print("\n[bold white]Alfred:[/bold white] Welcome back, sir. How may I assist you further?")
                         else:
                             console.print("\n[bold white]Alfred:[/bold white] I'm already here, sir. At your service.")
+                    elif cmd.startswith("/use_agent"):
+                        # Extract agent name from command
+                        parts = user_input.split(maxsplit=1)
+                        if len(parts) > 1:
+                            requested_agent = parts[1].strip().lower()
+                            # Validate agent exists
+                            capability_service = container.get_capability_service()
+                            agents = capability_service.get_agents()
+                            agent_names = [a.get("name", "").lower() for a in agents]
+
+                            if requested_agent in agent_names:
+                                current_agent = requested_agent
+                                console.print(f"\n[bold white]Alfred:[/bold white] Very good, sir. Switching to [green]{requested_agent}[/green].")
+                                console.print("[dim]Note: Direct agent interaction is being configured. Use /call_alfred to return.[/dim]")
+                            else:
+                                console.print(f"[red]Agent '{requested_agent}' not found.[/red]")
+                                console.print(f"Available agents: {', '.join(agent_names)}")
+                                console.print("Use [bold]/agents[/bold] to see full details")
+                        else:
+                            console.print("[yellow]Usage: /use_agent <agent_name>[/yellow]")
+                            console.print("Example: /use_agent weather_agent")
+                            console.print("Use [bold]/agents[/bold] to see available agents")
                     elif cmd == "/clear":
                         console.clear()
                         print_banner()
