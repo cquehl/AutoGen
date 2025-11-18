@@ -6,6 +6,7 @@ Provides validation, audit logging, and timeout management.
 """
 
 import asyncio
+import logging
 from typing import Any, Dict, Optional
 from dataclasses import dataclass
 from enum import Enum

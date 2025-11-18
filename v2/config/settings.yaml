@@ -95,6 +95,17 @@ agents:
     tools: []
     reflect_on_tool_use: false
 
+  alfred:
+    name: Alfred
+    model_provider: azure
+    temperature: 0.7
+    max_tokens: 4096
+    tools:
+      - alfred.list_capabilities
+      - alfred.show_history
+      - alfred.delegate_to_team
+    reflect_on_tool_use: true
+
 # Team Configurations
 teams:
   weather_team:

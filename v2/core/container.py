@@ -87,9 +87,42 @@ class Container:
             # Auto-discover and register tools
             registry.discover_tools()
 
+            # Register Alfred's tools (requires services, so done after registry creation)
+            self._register_alfred_tools(registry)
+
             self._singletons["tool_registry"] = registry
 
         return self._singletons["tool_registry"]
+
+    def _register_alfred_tools(self, registry):
+        """
+        Register Alfred's specialized tools with service dependencies.
+
+        Args:
+            registry: ToolRegistry to register tools in
+        """
+        from ..tools.alfred import (
+            ListCapabilitiesTool,
+            ShowHistoryTool,
+            DelegateToTeamTool,
+        )
+
+        # Register tools with Alfred category
+        # Note: These tools need special handling in get_tool due to service dependencies
+        registry.register(
+            name=ListCapabilitiesTool.NAME,
+            tool_class=ListCapabilitiesTool,
+        )
+
+        registry.register(
+            name=ShowHistoryTool.NAME,
+            tool_class=ShowHistoryTool,
+        )
+
+        registry.register(
+            name=DelegateToTeamTool.NAME,
+            tool_class=DelegateToTeamTool,
+        )
 
     def get_agent_registry(self):
         """
@@ -172,7 +205,29 @@ class Container:
                 tool_registry=self.get_tool_registry(),
             )
 
+            # Initialize Alfred's services and inject into tool registry
+            self._initialize_alfred_services()
+
         return self._singletons["agent_factory"]
+
+    def _initialize_alfred_services(self):
+        """
+        Initialize services required for Alfred and inject into tool registry.
+
+        This must be called after agent_factory is created to avoid circular dependencies.
+        """
+        # Get or create the services
+        capability_service = self.get_capability_service()
+        history_service = self.get_history_service()
+        agent_factory = self._singletons["agent_factory"]
+
+        # Inject services into tool registry for Alfred's tools
+        tool_registry = self.get_tool_registry()
+        tool_registry.set_alfred_services(
+            capability_service=capability_service,
+            history_service=history_service,
+            agent_factory=agent_factory,
+        )
 
     def get_message_bus(self):
         """
@@ -273,6 +328,46 @@ class Container:
             )
 
         return self._singletons["vision_service"]
+
+    def get_capability_service(self):
+        """
+        Get capability service (singleton).
+
+        Provides auto-discovery and caching of system capabilities for Alfred.
+
+        Returns:
+            CapabilityService instance
+        """
+        if "capability_service" not in self._singletons:
+            from ..services.capability_service import CapabilityService
+
+            self._singletons["capability_service"] = CapabilityService(
+                agent_registry=self.get_agent_registry(),
+                tool_registry=self.get_tool_registry(),
+                settings=self.settings,
+            )
+
+        return self._singletons["capability_service"]
+
+    def get_history_service(self):
+        """
+        Get history service (singleton).
+
+        Provides unified access to conversation history, message bus events,
+        and tool execution logs for Alfred.
+
+        Returns:
+            HistoryService instance
+        """
+        if "history_service" not in self._singletons:
+            from ..services.history_service import HistoryService
+
+            self._singletons["history_service"] = HistoryService(
+                message_bus=self.get_message_bus(),
+                observability_manager=self.get_observability_manager(),
+            )
+
+        return self._singletons["history_service"]
 
     async def dispose(self):
         """
