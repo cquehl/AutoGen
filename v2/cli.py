@@ -213,7 +213,7 @@ async def interactive_loop():
     obs.initialize()
 
     # Setup signal handlers for graceful shutdown
-    loop = asyncio.get_event_loop()
+    # Get the current running event loop and register handlers early
     shutdown_event = asyncio.Event()
 
     def signal_handler(signum):
@@ -221,7 +221,8 @@ async def interactive_loop():
         logger.info(f"Received signal {signum}, initiating graceful shutdown")
         shutdown_event.set()
 
-    # Register handlers for SIGTERM and SIGINT
+    # Register handlers for SIGTERM and SIGINT early, before entering the main loop
+    loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, lambda s=sig: signal_handler(s))
 

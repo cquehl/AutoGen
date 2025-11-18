@@ -270,6 +270,7 @@ class Container:
             self._singletons["vision_service"] = VisionService(
                 config=self.settings.multimodal,
                 llm_settings=self.settings,
+                security_middleware=self.get_security_middleware(),
             )
 
         return self._singletons["vision_service"]

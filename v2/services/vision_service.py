@@ -30,16 +30,18 @@ class VisionService:
     Abstracts away the model client details from tools.
     """
 
-    def __init__(self, config: MultimodalConfig, llm_settings: AppSettings):
+    def __init__(self, config: MultimodalConfig, llm_settings: AppSettings, security_middleware=None):
         """
         Initialize vision service.
 
         Args:
             config: Multimodal configuration
             llm_settings: Application settings for LLM client
+            security_middleware: Security middleware for path validation (optional but recommended)
         """
         self.config = config
         self.llm_settings = llm_settings
+        self.security = security_middleware
         self._model_client = None
 
     def _get_model_client(self):
@@ -82,6 +84,18 @@ class VisionService:
             VisionResult with analysis
         """
         try:
+            # Security validation: Check path is within allowed directories
+            if self.security is not None:
+                validator = self.security.get_path_validator()
+                is_valid, error, validated_path = validator.validate(image_path, operation="read")
+                if not is_valid:
+                    return VisionResult(
+                        success=False,
+                        error=f"Security validation failed: {error}"
+                    )
+                # Use validated path
+                image_path = str(validated_path)
+
             # Validate image path
             image_file = Path(image_path)
             if not image_file.exists():
