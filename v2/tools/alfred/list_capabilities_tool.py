@@ -4,9 +4,12 @@ Yamazaki v2 - Alfred List Capabilities Tool
 Allows Alfred to list and explain system capabilities (agents, teams, tools).
 """
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from ...core.base_tool import BaseTool, ToolResult, ToolCategory
+
+if TYPE_CHECKING:
+    from ...services.capability_service import CapabilityService
 
 
 class ListCapabilitiesTool(BaseTool):
@@ -22,7 +25,7 @@ class ListCapabilitiesTool(BaseTool):
     VERSION = "1.0.0"
     REQUIRES_SECURITY_VALIDATION = False
 
-    def __init__(self, capability_service):
+    def __init__(self, capability_service: "CapabilityService") -> None:
         """
         Initialize tool with capability service.
 
@@ -43,6 +46,12 @@ class ListCapabilitiesTool(BaseTool):
             ToolResult with formatted capabilities
         """
         try:
+            # Validate capability service is available
+            if not self.capability_service:
+                return ToolResult.error(
+                    "My apologies, sir. The capability service is not currently available."
+                )
+
             category_lower = category.lower()
 
             if category_lower == "all":

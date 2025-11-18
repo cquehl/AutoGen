@@ -43,10 +43,13 @@ def print_alfred_greeting():
     greeting = """[bold white]Alfred:[/bold white] Good day, sir. Alfred at your service.
 How may I assist you today?
 
-[dim]I oversee the Yamazaki system and can help you with:
-  • Explaining available capabilities (/help)
-  • Showing your recent actions (just ask!)
-  • Delegating tasks to specialist teams[/dim]
+[dim]I have comprehensive knowledge of the Yamazaki system and can presently:
+  • [bold]List capabilities[/bold] - Try: "/agents" or "/tools" or "/teams"
+  • [bold]Show your history[/bold] - Ask me: "What were my last actions?"
+  • [bold]Explain what's available[/bold] - Ask: "What can you do?"
+  • [bold]Provide guidance[/bold] - Use "/help" for all commands[/dim]
+
+[cyan]Tip:[/cyan] [dim]Just ask me questions in plain English, or use slash commands above.[/dim]
 """
     console.print(greeting)
 
@@ -54,33 +57,39 @@ How may I assist you today?
 def show_help():
     """Show available commands"""
     help_text = """
-[bold cyan]Available Commands:[/bold cyan]
+[bold cyan]📋 Slash Commands:[/bold cyan]
 
   [bold]/help[/bold]         - Show this help message
-  [bold]/agents[/bold]       - List all available agents
-  [bold]/tools[/bold]        - List all available tools
-  [bold]/teams[/bold]        - List all available teams
-  [bold]/info[/bold]         - Show system information
-  [bold]/call_alfred[/bold]  - Return to Alfred (use during team interactions)
-  [bold]/clear[/bold]        - Clear the screen
-  [bold]/exit[/bold]         - Exit the CLI
-  [bold]/quit[/bold]         - Exit the CLI
+  [bold]/agents[/bold]       - List all available agents (Weather, Data Analyst, etc.)
+  [bold]/tools[/bold]        - List all available tools (database, file, weather)
+  [bold]/teams[/bold]        - List configured teams (weather_team, data_team, magentic_one)
+  [bold]/info[/bold]         - Show system information and status
+  [bold]/call_alfred[/bold]  - Return to Alfred (when working with a team)
+  [bold]/clear[/bold]        - Clear the screen and reset view
+  [bold]/exit, /quit[/bold]  - Exit the CLI
 
-[bold cyan]How to Use:[/bold cyan]
+[bold cyan]💬 Talking to Alfred:[/bold cyan]
 
-  1. Alfred is your primary interface - just ask him anything!
-  2. He can explain capabilities, show history, and delegate to teams
-  3. When delegated to a team, use /call_alfred to return to Alfred
-  4. Use /agents and /tools to see what's available
+Alfred can answer questions right now using his three specialized tools:
+  • [green]list_capabilities[/green] - "What agents are available?" "Show me tools"
+  • [green]show_history[/green] - "What were my last 5 actions?" "Show session history"
+  • [green]delegate_to_team[/green] - "Delegate weather analysis to weather_team"
 
-[bold cyan]Examples:[/bold cyan]
+[bold cyan]📝 Example Queries:[/bold cyan]
 
+  [dim]Try these with Alfred:[/dim]
   • "What can you do?"
-  • "What were my last actions?"
-  • "Analyze the weather in Seattle"
-  • "Show me available teams"
+  • "List all available agents"
+  • "Show me my last 10 actions"
+  • "What teams are configured?"
+
+[bold cyan]🔄 Workflow:[/bold cyan]
+
+  1. Start → Talk to Alfred (he'll use his tools to help)
+  2. When ready → Alfred delegates to specialist teams
+  3. Working with team → Use [bold]/call_alfred[/bold] to return
     """
-    console.print(Panel(help_text, title="Alfred's Help", border_style="cyan"))
+    console.print(Panel(help_text, title="🎩 Alfred's Concierge Help", border_style="cyan"))
 
 
 def show_agents():
@@ -213,27 +222,29 @@ async def process_query(query: str, agent_name: str = "alfred") -> str:
         if agent_name == "alfred":
             return f"""[bold white]Alfred:[/bold white] Certainly, sir. Regarding: "{query}"
 
-[dim]I understand your request. However, my conversational capabilities are currently being enhanced.
-In the meantime, I remain at your service through these commands:[/dim]
+[dim]I'm currently interfacing with my full conversational capabilities.
+For immediate assistance, I can help through these specific methods:[/dim]
 
-[bold cyan]Immediate Actions:[/bold cyan]
-  • [bold]/agents[/bold] - View all available agents
-  • [bold]/tools[/bold] - View all available tools
-  • [bold]/teams[/bold] - View configured teams
-  • [bold]/info[/bold] - System information
+[bold cyan]🔍 Try These Commands:[/bold cyan]
+  • [bold]/agents[/bold] - See: Weather Agent, Data Analyst, Orchestrator, Web Surfer
+  • [bold]/tools[/bold] - View: database queries, file operations, weather forecasts
+  • [bold]/teams[/bold] - Explore: weather_team, data_team, magentic_one
+  • [bold]/help[/bold] - Full guide to working with Alfred
 
-[bold cyan]Available Capabilities:[/bold cyan]
-  • Weather forecasting via [green]weather_team[/green]
-  • Data analysis via [green]data_team[/green]
-  • Complex multi-agent workflows via [green]magentic_one[/green]
+[bold cyan]💡 Example Queries I Can Handle:[/bold cyan]
+  • "List all available agents" → [dim]Uses my list_capabilities tool[/dim]
+  • "Show my last 5 actions" → [dim]Uses my show_history tool[/dim]
+  • "What teams are configured?" → [dim]Uses my list_capabilities tool[/dim]
 
-[dim]The full conversational interface will be available shortly, sir.[/dim]
+[cyan]Tip:[/cyan] [dim]Use the slash commands above for immediate results, sir.[/dim]
 """
         else:
             return f"""[bold white]{agent_name.title()}:[/bold white] Task received: {query}
 
-[dim](Agent execution framework is being configured. You'll soon be able to interact
-with agents directly for task completion.)[/dim]"""
+[dim](Direct agent interaction is being configured. You'll soon execute tasks
+through specialist agents. For now, use Alfred as your interface.)[/dim]
+
+[cyan]Tip:[/cyan] Use [bold]/call_alfred[/bold] to return to Alfred."""
 
     except Exception as e:
         if agent_name == "alfred":

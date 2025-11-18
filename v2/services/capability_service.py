@@ -5,9 +5,14 @@ Provides auto-discovery and caching of system capabilities for Alfred.
 Introspects agents, tools, and teams to provide conversational capability descriptions.
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, TYPE_CHECKING
 from datetime import datetime
 import json
+
+if TYPE_CHECKING:
+    from ..agents.registry import AgentRegistry
+    from ..tools.registry import ToolRegistry
+    from ..config.models import AppSettings
 
 
 class CapabilityService:
@@ -18,7 +23,13 @@ class CapabilityService:
     intelligent delegation decisions.
     """
 
-    def __init__(self, agent_registry, tool_registry, settings):
+    def __init__(
+        self,
+        agent_registry: "AgentRegistry",
+        tool_registry: "ToolRegistry",
+        settings: "AppSettings",
+        cache_ttl_seconds: int = 300
+    ) -> None:
         """
         Initialize capability service.
 
@@ -26,6 +37,7 @@ class CapabilityService:
             agent_registry: AgentRegistry instance for agent discovery
             tool_registry: ToolRegistry instance for tool discovery
             settings: AppSettings for team configurations
+            cache_ttl_seconds: Cache time-to-live in seconds (default: 300 = 5 minutes)
         """
         self.agent_registry = agent_registry
         self.tool_registry = tool_registry
@@ -34,7 +46,7 @@ class CapabilityService:
         # Cache for capabilities
         self._cache: Dict[str, Any] = {}
         self._last_refresh: Optional[datetime] = None
-        self._cache_ttl_seconds = 300  # 5 minutes cache
+        self._cache_ttl_seconds = cache_ttl_seconds
 
     def refresh_cache(self) -> None:
         """

@@ -5,12 +5,16 @@ Provides unified access to conversation history, message bus events, and tool ex
 Alfred uses this to answer "What were my last actions?" questions.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 from datetime import datetime, timedelta
 from pathlib import Path
 import json
 
 from ..observability.logger import get_logger
+
+if TYPE_CHECKING:
+    from ..messaging.message_bus import MessageBus
+    from ..observability.manager import ObservabilityManager
 
 logger = get_logger(__name__)
 
@@ -25,7 +29,11 @@ class HistoryService:
     - Tool execution logs (from observability)
     """
 
-    def __init__(self, message_bus, observability_manager):
+    def __init__(
+        self,
+        message_bus: "MessageBus",
+        observability_manager: "ObservabilityManager"
+    ) -> None:
         """
         Initialize history service.
 

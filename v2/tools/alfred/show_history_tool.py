@@ -4,10 +4,13 @@ Yamazaki v2 - Alfred Show History Tool
 Allows Alfred to show recent actions, conversation history, and tool executions.
 """
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from datetime import datetime, timedelta
 
 from ...core.base_tool import BaseTool, ToolResult, ToolCategory
+
+if TYPE_CHECKING:
+    from ...services.history_service import HistoryService
 
 
 class ShowHistoryTool(BaseTool):
@@ -23,7 +26,7 @@ class ShowHistoryTool(BaseTool):
     VERSION = "1.0.0"
     REQUIRES_SECURITY_VALIDATION = False
 
-    def __init__(self, history_service):
+    def __init__(self, history_service: "HistoryService") -> None:
         """
         Initialize tool with history service.
 
@@ -51,6 +54,12 @@ class ShowHistoryTool(BaseTool):
             ToolResult with formatted history
         """
         try:
+            # Validate history service is available
+            if not self.history_service:
+                return ToolResult.error(
+                    "My apologies, sir. The history service is not currently available."
+                )
+
             scope_lower = scope.lower()
 
             if scope_lower == "recent":

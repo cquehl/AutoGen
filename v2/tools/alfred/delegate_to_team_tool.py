@@ -4,9 +4,13 @@ Yamazaki v2 - Alfred Delegate to Team Tool
 Allows Alfred to delegate tasks to specific teams with full context hand-off.
 """
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from ...core.base_tool import BaseTool, ToolResult, ToolCategory
+
+if TYPE_CHECKING:
+    from ...agents.factory import AgentFactory
+    from ...services.capability_service import CapabilityService
 
 
 class DelegateToTeamTool(BaseTool):
@@ -22,7 +26,11 @@ class DelegateToTeamTool(BaseTool):
     VERSION = "1.0.0"
     REQUIRES_SECURITY_VALIDATION = False
 
-    def __init__(self, agent_factory, capability_service):
+    def __init__(
+        self,
+        agent_factory: "AgentFactory",
+        capability_service: "CapabilityService"
+    ) -> None:
         """
         Initialize tool with agent factory and capability service.
 
@@ -52,6 +60,16 @@ class DelegateToTeamTool(BaseTool):
             ToolResult with delegation information
         """
         try:
+            # Validate services are available
+            if not self.agent_factory:
+                return ToolResult.error(
+                    "My apologies, sir. The agent factory is not currently available."
+                )
+            if not self.capability_service:
+                return ToolResult.error(
+                    "My apologies, sir. The capability service is not currently available."
+                )
+
             # Validate team exists
             available_teams = self.agent_factory.list_available_teams()
             if team_name not in available_teams:
