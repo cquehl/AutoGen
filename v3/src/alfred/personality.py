@@ -5,7 +5,7 @@ AI-generated greetings and butler-like character
 
 import random
 from datetime import datetime
-from typing import List
+from typing import Dict, List, Optional
 
 from ..core import get_logger, get_llm_gateway, get_settings
 
@@ -143,9 +143,12 @@ Keep it short, elegant, and butler-appropriate."""
         else:  # time_aware (default)
             return await self.generate_ai_greeting()
 
-    def get_system_message(self) -> str:
+    def get_system_message(self, user_preferences: Optional[Dict[str, str]] = None) -> str:
         """
         Get Alfred's system message for LLM interactions.
+
+        Args:
+            user_preferences: Optional user preferences (gender, name, etc.)
 
         Returns:
             System message defining Alfred's personality and capabilities
@@ -159,7 +162,24 @@ Keep it short, elegant, and butler-appropriate."""
         else:  # balanced
             personality_desc = "Professional with occasional subtle wit (20% of the time)."
 
-        return f"""You are **Alfred**, the distinguished AI concierge and butler for the Suntory System.
+        # Add user preference context
+        preference_context = ""
+        if user_preferences:
+            prefs = []
+            if "gender" in user_preferences:
+                gender = user_preferences["gender"]
+                if gender == "male":
+                    prefs.append("Address the user as 'sir' (not 'madam')")
+                elif gender == "female":
+                    prefs.append("Address the user as 'madam' (not 'sir')")
+
+            if "name" in user_preferences:
+                prefs.append(f"User's name is {user_preferences['name']}")
+
+            if prefs:
+                preference_context = "\n\n**IMPORTANT USER PREFERENCES:**\n" + "\n".join(f"- {p}" for p in prefs)
+
+        return f"""You are **Alfred**, the distinguished AI concierge and butler for the Suntory System.{preference_context}
 
 **Your Personality:**
 {personality_desc}
@@ -191,10 +211,16 @@ Keep it short, elegant, and butler-appropriate."""
 
 **Your Tools and Skills:**
 - Multi-model support: Switch between GPT-4, Claude, Gemini
-- Code execution in sandboxed Docker environments
-- Web research and file navigation
+- Code execution in sandboxed Docker environments (when Docker is running)
+- File navigation and code analysis
 - Database queries and data analysis
 - Autonomous task completion
+- Team orchestration with specialist agents
+
+**Important Limitations:**
+- You do NOT have real-time web browsing or search capabilities
+- If users ask you to "search the web" or "surf the web", politely explain that you don't have that capability
+- Instead, you can help with information you know, code generation, analysis, etc.
 
 **How to Respond:**
 1. Understand the user's request

@@ -5,6 +5,12 @@ Foundational components for the system
 
 from .config import get_settings, reset_settings, SuntorySettings
 from .llm_gateway import get_llm_gateway, reset_llm_gateway, LLMGateway
+from .model_factory import (
+    get_model_client_factory,
+    create_model_client,
+    reset_model_factory,
+    ModelClientFactory,
+)
 from .persistence import (
     get_db_manager,
     get_vector_manager,
@@ -45,6 +51,11 @@ __all__ = [
     "get_llm_gateway",
     "reset_llm_gateway",
     "LLMGateway",
+    # Model Factory
+    "get_model_client_factory",
+    "create_model_client",
+    "reset_model_factory",
+    "ModelClientFactory",
     # Persistence
     "get_db_manager",
     "get_vector_manager",

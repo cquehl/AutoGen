@@ -22,6 +22,7 @@ from ..core import (
 )
 from .modes import AlfredMode, get_direct_mode, get_team_mode
 from .personality import get_alfred_personality
+from .user_preferences import UserPreferencesManager
 
 logger = get_logger(__name__)
 
@@ -50,6 +51,9 @@ class AlfredEnhanced:
         self.conversation_history: List[dict] = []
         self.current_mode = AlfredMode.DIRECT
 
+        # User preferences manager
+        self.preferences_manager = UserPreferencesManager(self.session_id)
+
         logger.info(
             "Alfred Enhanced initialized",
             session_id=self.session_id,
@@ -67,6 +71,9 @@ class AlfredEnhanced:
             # Initialize vector store
             vector = get_vector_manager()
 
+            # Load user preferences from previous sessions
+            self.preferences_manager.load_from_storage()
+
             # Log session start
             await db.add_conversation(
                 session_id=self.session_id,
@@ -78,7 +85,11 @@ class AlfredEnhanced:
                 }
             )
 
-            logger.info("Alfred Enhanced ready", session_id=self.session_id)
+            logger.info(
+                "Alfred Enhanced ready",
+                session_id=self.session_id,
+                user_preferences=self.preferences_manager.get_preferences()
+            )
 
         except Exception as e:
             error = handle_exception(e)
@@ -153,6 +164,16 @@ class AlfredEnhanced:
         try:
             # Add to history
             await self._add_to_history("user", user_message)
+
+            # Update user preferences from message
+            prefs_updated = self.preferences_manager.update_from_message(user_message)
+            if prefs_updated:
+                # Acknowledge preference update
+                confirmation = self.preferences_manager.get_confirmation_message(
+                    self.preferences_manager.get_preferences()
+                )
+                if confirmation:
+                    yield confirmation + "\n\n"
 
             # Check for commands (non-streaming)
             if user_message.startswith("/"):
@@ -232,7 +253,9 @@ class AlfredEnhanced:
 
     async def _process_direct_streaming(self, message: str) -> AsyncIterator[str]:
         """Process message in direct mode with streaming"""
-        system_message = self.personality.get_system_message()
+        # Get user preferences and inject into system message
+        user_prefs = self.preferences_manager.get_preferences()
+        system_message = self.personality.get_system_message(user_prefs)
 
         # Build message history
         messages = [{"role": "system", "content": system_message}]

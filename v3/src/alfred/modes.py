@@ -9,8 +9,10 @@ from typing import Any, Dict, List, Optional
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.conditions import TextMentionTermination
 from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_core.models import ChatCompletionClient
 
 from ..core import get_llm_gateway, get_logger, set_correlation_id
+from ..core.model_factory import create_model_client
 
 logger = get_logger(__name__)
 
@@ -156,7 +158,7 @@ class TeamOrchestratorMode:
             name: Agent name
             role: Agent role/title
             expertise: Area of expertise
-            model: LLM model to use
+            model: LLM model to use (model name string)
 
         Returns:
             Configured AssistantAgent
@@ -179,8 +181,14 @@ class TeamOrchestratorMode:
 
 Focus on your area of expertise and coordinate with team members."""
 
-        # Use configured LLM model
-        model_client = model or self.llm_gateway.get_current_model()
+        # Create proper AutoGen ModelClient instead of passing string
+        # If model is provided, use it; otherwise use default from settings
+        model_client = create_model_client(model)
+
+        logger.debug(
+            f"Creating agent {name}",
+            model_client_type=type(model_client).__name__
+        )
 
         agent = AssistantAgent(
             name=name,
@@ -328,7 +336,7 @@ Focus on your area of expertise and coordinate with team members."""
 
         try:
             # Run the team
-            logger.info("Starting team collaboration")
+            logger.info("Starting team collaboration", correlation_id=correlation_id)
 
             result = await team.run(task=task_description)
 
@@ -337,14 +345,43 @@ Focus on your area of expertise and coordinate with team members."""
 
             logger.info(
                 "Team collaboration completed",
+                correlation_id=correlation_id,
                 turns=len(result.messages) if hasattr(result, 'messages') else 0
             )
 
             return final_output
 
+        except AttributeError as e:
+            # Specific handling for model_info errors
+            error_msg = str(e)
+            logger.error(
+                f"Team orchestration failed: {error_msg}",
+                correlation_id=correlation_id,
+                error_type="AttributeError"
+            )
+
+            if "model_info" in error_msg:
+                return (
+                    "I apologize, but the team encountered a configuration issue with the AI models. "
+                    "This has been logged for investigation. Please try using direct mode for now, "
+                    "or contact support if this persists."
+                )
+            else:
+                return f"I apologize, but the team encountered an error: {error_msg}"
+
         except Exception as e:
-            logger.error(f"Team orchestration failed: {e}")
-            return f"I apologize, but the team encountered an error: {str(e)}"
+            import traceback
+            logger.error(
+                f"Team orchestration failed: {str(e)}\nTraceback:\n{traceback.format_exc()}",
+                correlation_id=correlation_id
+            )
+            return (
+                f"I apologize, but the team encountered an error: {str(e)}\n\n"
+                "This has been logged. You may want to try:\n"
+                "• Using a simpler request\n"
+                "• Switching models with `/model <name>`\n"
+                "• Asking me directly without team mode"
+            )
 
     def _extract_team_output(self, result: Any) -> str:
         """Extract meaningful output from team result"""
