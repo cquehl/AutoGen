@@ -27,6 +27,10 @@ from .user_preferences import UserPreferencesManager, get_privacy_notice
 
 logger = get_logger(__name__)
 
+# Configuration constants
+MAX_CONTEXT_MESSAGES = 10  # Maximum number of historical messages to include
+MAX_TRUNCATE_LENGTH = 100  # Maximum length for truncated display
+
 
 class AlfredEnhanced:
     """
@@ -266,8 +270,8 @@ class AlfredEnhanced:
         # Build message history
         messages = [{"role": "system", "content": system_message}]
 
-        # Add context (last 10 messages)
-        for entry in self.conversation_history[-10:]:
+        # Add context (last N messages for efficiency)
+        for entry in self.conversation_history[-MAX_CONTEXT_MESSAGES:]:
             if entry["role"] in ["user", "assistant"]:
                 messages.append({
                     "role": entry["role"],
@@ -482,10 +486,10 @@ class AlfredEnhanced:
 
         history_lines = ["**Recent Conversation:**\n"]
 
-        for entry in self.conversation_history[-10:]:
+        for entry in self.conversation_history[-MAX_CONTEXT_MESSAGES:]:
             role = entry["role"].capitalize()
-            content = entry["content"][:100]  # Truncate
-            if len(entry["content"]) > 100:
+            content = entry["content"][:MAX_TRUNCATE_LENGTH]  # Truncate for readability
+            if len(entry["content"]) > MAX_TRUNCATE_LENGTH:
                 content += "..."
             timestamp = entry.get("timestamp", "")
             if timestamp:

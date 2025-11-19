@@ -80,6 +80,116 @@ class DockerExecutor:
                     original_error=e
                 )
 
+    def _execute_in_container(
+        self,
+        command: list,
+        timeout: int,
+        memory_limit: str = "512m",
+        cpu_limit: float = 1.0,
+        network_disabled: bool = True,
+        working_dir: str = "/workspace"
+    ) -> Tuple[str, str, int]:
+        """
+        Core execution logic for Docker containers.
+
+        ARCHITECTURE: Centralized execution to eliminate code duplication.
+
+        Args:
+            command: Command to execute in container
+            timeout: Timeout in seconds
+            memory_limit: Memory limit (e.g., "512m", "1g")
+            cpu_limit: CPU limit as fraction (e.g., 1.0 = 1 CPU)
+            network_disabled: Disable network access
+            working_dir: Working directory in container
+
+        Returns:
+            Tuple of (stdout, stderr, exit_code)
+
+        Raises:
+            SuntoryError: If execution fails
+        """
+        if not self.client:
+            raise SuntoryError(
+                message="Docker execution is disabled",
+                recovery_suggestions=[
+                    "Enable Docker in configuration",
+                    "Start Docker daemon"
+                ]
+            )
+
+        self._ensure_image()
+
+        logger.info(
+            "Executing command in Docker",
+            command=command[:100] if len(str(command)) > 100 else command,
+            timeout=timeout,
+            memory_limit=memory_limit
+        )
+
+        container: Optional[Container] = None
+        try:
+            # Run container
+            container = self.client.containers.run(
+                image="python:3.11-slim",
+                command=command,
+                volumes={
+                    str(self.settings.get_workspace_path()): {
+                        'bind': '/workspace',
+                        'mode': 'rw'
+                    }
+                },
+                working_dir=working_dir,
+                mem_limit=memory_limit,
+                nano_cpus=int(cpu_limit * 1e9),  # Convert to nano CPUs
+                network_disabled=network_disabled,
+                detach=True,
+                remove=False,  # Don't auto-remove, we need logs
+                security_opt=["no-new-privileges:true"],
+                cap_drop=["ALL"],  # Drop all capabilities
+                read_only=False,  # Workspace needs to be writable
+            )
+
+            # Wait for completion with timeout
+            result = container.wait(timeout=timeout)
+            exit_code = result['StatusCode']
+
+            # Get logs
+            stdout = container.logs(stdout=True, stderr=False).decode('utf-8')
+            stderr = container.logs(stdout=False, stderr=True).decode('utf-8')
+
+            logger.info(
+                "Container execution completed",
+                exit_code=exit_code,
+                stdout_length=len(stdout),
+                stderr_length=len(stderr)
+            )
+
+            return stdout, stderr, exit_code
+
+        except Exception as e:
+            # Kill container on timeout or error
+            if container:
+                try:
+                    container.kill()
+                except Exception as kill_error:
+                    logger.warning(f"Failed to kill container: {kill_error}")
+
+            if "timeout" in str(e).lower():
+                raise ResourceError("execution time", f"{timeout}s")
+            else:
+                raise SuntoryError(
+                    message=f"Container execution failed: {str(e)}",
+                    original_error=e
+                )
+
+        finally:
+            # Clean up container
+            if container:
+                try:
+                    container.remove(force=True)
+                except Exception as cleanup_error:
+                    logger.warning(f"Failed to remove container: {cleanup_error}")
+
     async def execute_python(
         self,
         code: str,
@@ -104,18 +214,6 @@ class DockerExecutor:
         Raises:
             SuntoryError: If execution fails
         """
-        if not self.client:
-            raise SuntoryError(
-                message="Docker execution is disabled",
-                recovery_suggestions=[
-                    "Enable Docker in configuration",
-                    "Start Docker daemon"
-                ]
-            )
-
-        # Ensure image is available
-        self._ensure_image()
-
         # Create temporary file for code
         with tempfile.NamedTemporaryFile(
             mode='w',
@@ -127,80 +225,21 @@ class DockerExecutor:
             code_file = Path(f.name)
 
         try:
-            logger.info(
-                "Executing Python code in Docker",
+            # Execute in thread pool to avoid blocking event loop
+            return await asyncio.to_thread(
+                self._execute_in_container,
+                command=["python", f"/workspace/{code_file.name}"],
                 timeout=timeout,
                 memory_limit=memory_limit,
+                cpu_limit=cpu_limit,
                 network_disabled=network_disabled
             )
-
-            # Run container
-            container: Container = self.client.containers.run(
-                image="python:3.11-slim",
-                command=["python", f"/workspace/{code_file.name}"],
-                volumes={
-                    str(self.settings.get_workspace_path()): {
-                        'bind': '/workspace',
-                        'mode': 'rw'
-                    }
-                },
-                working_dir="/workspace",
-                mem_limit=memory_limit,
-                nano_cpus=int(cpu_limit * 1e9),  # Convert to nano CPUs
-                network_disabled=network_disabled,
-                detach=True,
-                remove=False,  # Don't auto-remove, we need logs
-                security_opt=["no-new-privileges:true"],
-                cap_drop=["ALL"],  # Drop all capabilities
-                read_only=False,  # Workspace needs to be writable
-            )
-
-            # Wait for completion with timeout
-            try:
-                result = container.wait(timeout=timeout)
-                exit_code = result['StatusCode']
-
-                # Get logs
-                stdout = container.logs(stdout=True, stderr=False).decode('utf-8')
-                stderr = container.logs(stdout=False, stderr=True).decode('utf-8')
-
-                logger.info(
-                    "Code execution completed",
-                    exit_code=exit_code,
-                    stdout_length=len(stdout),
-                    stderr_length=len(stderr)
-                )
-
-                return stdout, stderr, exit_code
-
-            except Exception as e:
-                # Kill container on timeout or error
-                try:
-                    container.kill()
-                except:
-                    pass
-
-                if "timeout" in str(e).lower():
-                    raise ResourceError("execution time", f"{timeout}s")
-                else:
-                    raise SuntoryError(
-                        message=f"Container execution failed: {str(e)}",
-                        original_error=e
-                    )
-
-            finally:
-                # Clean up container
-                try:
-                    container.remove(force=True)
-                except:
-                    pass
-
         finally:
             # Clean up code file
             try:
                 code_file.unlink()
-            except:
-                pass
+            except Exception as cleanup_error:
+                logger.warning(f"Failed to unlink code file: {cleanup_error}")
 
     async def execute_bash(
         self,
@@ -219,64 +258,13 @@ class DockerExecutor:
         Returns:
             Tuple of (stdout, stderr, exit_code)
         """
-        if not self.client:
-            raise SuntoryError("Docker execution is disabled")
-
-        self._ensure_image()
-
-        logger.info("Executing bash command in Docker", command=command[:100])
-
-        try:
-            container: Container = self.client.containers.run(
-                image="python:3.11-slim",
-                command=["bash", "-c", command],
-                volumes={
-                    str(self.settings.get_workspace_path()): {
-                        'bind': '/workspace',
-                        'mode': 'rw'
-                    }
-                },
-                working_dir=working_dir,
-                mem_limit="512m",
-                network_disabled=True,
-                detach=True,
-                remove=False,
-                security_opt=["no-new-privileges:true"],
-                cap_drop=["ALL"],
-            )
-
-            try:
-                result = container.wait(timeout=timeout)
-                exit_code = result['StatusCode']
-
-                stdout = container.logs(stdout=True, stderr=False).decode('utf-8')
-                stderr = container.logs(stdout=False, stderr=True).decode('utf-8')
-
-                return stdout, stderr, exit_code
-
-            except Exception as e:
-                try:
-                    container.kill()
-                except:
-                    pass
-
-                if "timeout" in str(e).lower():
-                    raise ResourceError("execution time", f"{timeout}s")
-                else:
-                    raise SuntoryError(
-                        message=f"Command execution failed: {str(e)}",
-                        original_error=e
-                    )
-
-            finally:
-                try:
-                    container.remove(force=True)
-                except:
-                    pass
-
-        except Exception as e:
-            logger.error(f"Bash execution failed: {e}")
-            raise
+        # Execute in thread pool to avoid blocking event loop
+        return await asyncio.to_thread(
+            self._execute_in_container,
+            command=["bash", "-c", command],
+            timeout=timeout,
+            working_dir=working_dir
+        )
 
     def is_available(self) -> bool:
         """Check if Docker is available"""

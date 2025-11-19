@@ -188,28 +188,19 @@ class UserPreferencesManager:
             # Use LLM-based structured extraction
             try:
                 extractor = get_preference_extractor()
-                # FIX: Use asyncio.run() instead of creating new event loop
-                # This prevents event loop conflicts and race conditions
+                # THREADING: This method is called within asyncio.to_thread(), so we're in a
+                # separate thread without an event loop. Safe to use asyncio.run() here.
                 import asyncio
-                try:
-                    # Try to get the current event loop
-                    loop = asyncio.get_running_loop()
-                    # If we're already in an async context, we can't use asyncio.run()
-                    # This should not happen in sync context, but guard against it
-                    logger.error("Cannot run async extraction from within async context")
-                    updated_prefs = self._update_with_regex(user_message)
-                except RuntimeError:
-                    # No event loop running - safe to use asyncio.run()
-                    extracted = asyncio.run(extractor.extract_preferences(user_message, use_llm=True))
+                extracted = asyncio.run(extractor.extract_preferences(user_message, use_llm=True))
 
-                    # Update any extracted preferences
-                    for field, value in extracted.to_dict().items():
-                        if value is not None:
-                            old_value = self.preferences.get(field)
-                            if old_value != value:
-                                self.preferences[field] = value
-                                updated_prefs[field] = value
-                                logger.info(f"Updated {field} preference to: {value}")
+                # Update any extracted preferences
+                for field, value in extracted.to_dict().items():
+                    if value is not None:
+                        old_value = self.preferences.get(field)
+                        if old_value != value:
+                            self.preferences[field] = value
+                            updated_prefs[field] = value
+                            logger.info(f"Updated {field} preference to: {value}")
 
             except Exception as e:
                 logger.warning(f"LLM extraction failed, falling back to regex: {e}", exc_info=True)
@@ -278,6 +269,9 @@ class UserPreferencesManager:
         """
         Save preferences to vector storage with deduplication and retry logic.
 
+        PERFORMANCE: Uses synchronous storage operations as ChromaDB is not async.
+        Thread-safe: Called within thread lock from async context.
+
         Args:
             max_retries: Maximum number of retry attempts
 
@@ -304,11 +298,8 @@ class UserPreferencesManager:
                         "user_id": self.user_id,
                         "session_id": self.session_id
                     })
-                    # FIX: Sanitize ID components to prevent injection attacks
-                    # Use only alphanumeric and underscore characters
-                    safe_user_id = re.sub(r'[^a-zA-Z0-9_]', '_', str(self.user_id))
-                    safe_key = re.sub(r'[^a-zA-Z0-9_]', '_', str(key))
-                    ids.append(f"{safe_user_id}_{safe_key}")
+                    # SECURITY: Sanitize ID components to prevent injection attacks
+                    ids.append(self._sanitize_id(self.user_id, key))
 
                 if documents:
                     self.vector_manager.add_memory(
@@ -333,7 +324,8 @@ class UserPreferencesManager:
                     f"ChromaDB error saving preferences (attempt {attempt + 1}/{max_retries}): {e}"
                 )
                 if attempt < max_retries - 1:
-                    # Exponential backoff: 0.5s, 1s, 2s
+                    # OPTIMIZATION: Exponential backoff in synchronous context (0.5s, 1s, 2s)
+                    # Note: This is synchronous sleep, safe here as we're in asyncio.to_thread()
                     sleep_time = 0.5 * (2 ** attempt)
                     time.sleep(sleep_time)
                 else:
@@ -351,6 +343,23 @@ class UserPreferencesManager:
                     retriable=False
                 )
 
+    def _sanitize_id(self, user_id: str, key: str) -> str:
+        """
+        Sanitize ID components to prevent injection attacks.
+
+        SECURITY: Only allow alphanumeric and underscore characters.
+
+        Args:
+            user_id: User identifier
+            key: Preference key
+
+        Returns:
+            Sanitized ID string
+        """
+        safe_user_id = re.sub(r'[^a-zA-Z0-9_]', '_', str(user_id))
+        safe_key = re.sub(r'[^a-zA-Z0-9_]', '_', str(key))
+        return f"{safe_user_id}_{safe_key}"
+
     def _delete_existing_preferences(self):
         """Delete existing preferences to enable deduplication"""
         try:
@@ -360,10 +369,7 @@ class UserPreferencesManager:
 
             # Try to delete existing preference entries by deterministic IDs
             for key in self.preferences.keys():
-                # FIX: Sanitize ID components to prevent injection attacks
-                safe_user_id = re.sub(r'[^a-zA-Z0-9_]', '_', str(self.user_id))
-                safe_key = re.sub(r'[^a-zA-Z0-9_]', '_', str(key))
-                pref_id = f"{safe_user_id}_{safe_key}"
+                pref_id = self._sanitize_id(self.user_id, key)
                 try:
                     collection.delete(ids=[pref_id])
                 except Exception:

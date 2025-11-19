@@ -16,6 +16,10 @@ from ..core.model_factory import create_model_client
 
 logger = get_logger(__name__)
 
+# Team mode detection thresholds
+COMPLEXITY_WORD_THRESHOLD = 50  # Words threshold for complex tasks
+MAX_RECENT_MESSAGES = 3  # Number of recent messages to extract from team output
+
 
 class AlfredMode(str, Enum):
     """Alfred's operating modes"""
@@ -125,9 +129,13 @@ class DirectProxyMode:
             logger.info("Team mode triggered by explicit request")
             return True
 
-        # Check message complexity (length as proxy)
-        if len(message.split()) > 50:
-            logger.info("Team mode triggered by message complexity")
+        # Check message complexity (word count as heuristic)
+        if len(message.split()) > COMPLEXITY_WORD_THRESHOLD:
+            logger.info(
+                "Team mode triggered by message complexity",
+                word_count=len(message.split()),
+                threshold=COMPLEXITY_WORD_THRESHOLD
+            )
             return True
 
         return False
@@ -387,8 +395,8 @@ Focus on your area of expertise and coordinate with team members."""
         """Extract meaningful output from team result"""
         # Extract the final message or summary
         if hasattr(result, 'messages') and result.messages:
-            # Get last few messages
-            recent_messages = result.messages[-3:]
+            # Get last few messages for context
+            recent_messages = result.messages[-MAX_RECENT_MESSAGES:]
             output_parts = []
 
             for msg in recent_messages:
