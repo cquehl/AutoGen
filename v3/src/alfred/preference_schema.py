@@ -76,14 +76,18 @@ Your task is to analyze user messages and extract any stated preferences about:
 5. Timezone
 6. Communication style (concise vs detailed)
 
+IMPORTANT: The user will prefix their preference statements with the command word "memorize".
+You should IGNORE this command word and extract ONLY the actual preference content.
+
 Only extract preferences that are EXPLICITLY stated. Do not infer or guess.
 
 Examples:
-- "I am a sir" → {"gender": "male"}
-- "Call me Master Charles" → {"name": "Master Charles", "gender": "male"}
-- "My name is Dr. Smith" → {"name": "Dr. Smith", "title": "Dr."}
-- "Keep it concise" → {"communication_style": "concise"}
-- "I prefer formal communication" → {"formality": "formal"}
+- "Memorize: I am a sir" → {"gender": "male"}
+- "memorize that I'm a sir" → {"gender": "male"}
+- "Please memorize: Call me Master Charles" → {"name": "Master Charles", "gender": "male"}
+- "Memorize my name is Dr. Smith" → {"name": "Dr. Smith", "title": "Dr."}
+- "memorize: Keep it concise" → {"communication_style": "concise"}
+- "Memorize I prefer formal communication" → {"formality": "formal"}
 
 If no preferences are mentioned, return an empty object with all fields as null.
 """
@@ -103,5 +107,5 @@ def create_extraction_prompt(user_message: str) -> str:
 
 Message: "{user_message}"
 
-Extract any preferences mentioned about how the user wants to be addressed, their name, or communication preferences.
+Remember to ignore the "memorize" command word itself - extract only the actual preference content.
 Only extract what is explicitly stated. Return null for fields where nothing is mentioned."""

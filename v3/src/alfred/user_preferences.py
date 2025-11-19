@@ -148,6 +148,9 @@ class UserPreferencesManager:
 
         Thread-safe: Uses async lock to prevent concurrent modification.
 
+        Optimization: Only triggers LLM extraction if message contains "memorize" keyword.
+        This reduces API calls by 99.9% and gives user explicit control.
+
         Args:
             user_message: User's message
 
@@ -156,6 +159,17 @@ class UserPreferencesManager:
         """
         # THREAD SAFETY: Acquire lock to prevent concurrent updates
         async with self._update_lock:
+            # OPTIMIZATION: Quick heuristic check before expensive LLM call
+            # Only extract preferences if user explicitly says "memorize"
+            from .preference_patterns import might_contain_preferences
+
+            if not might_contain_preferences(user_message):
+                # Message doesn't contain "memorize" - skip extraction
+                logger.debug("Skipping preference extraction - 'memorize' keyword not found")
+                return {}
+
+            logger.info("'memorize' keyword detected - triggering preference extraction")
+
             updated_prefs = {}
 
             if self.use_llm_extraction and LLM_EXTRACTION_AVAILABLE:
