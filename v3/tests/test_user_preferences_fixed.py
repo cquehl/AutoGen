@@ -177,26 +177,30 @@ class TestTitleExtraction:
 
 
 class TestHeuristics:
-    """Test preference detection heuristics"""
+    """Test explicit 'memorize' keyword detection"""
 
     def test_might_contain_preferences(self):
-        """Test fast heuristic for preference detection"""
-        # Should trigger
+        """Test that only 'memorize' keyword triggers extraction"""
+        # Positive cases - should trigger
         positive_cases = [
-            "My name is Charles",
-            "I prefer formal communication",
-            "Call me Master Charles",
-            "I'm in timezone America/New_York",
-            "I am a sir",
+            "Memorize: My name is Charles",
+            "memorize that I prefer formal communication",
+            "Please memorize my name is Master Charles",
+            "MEMORIZE I am a sir",
+            "Can you memorize this preference?",
         ]
 
         for msg in positive_cases:
             result = might_contain_preferences(msg)
-            assert result is True, f"Should detect preferences in: {msg}"
-            print(f"  ✓ '{msg}' → might contain preferences")
+            assert result is True, f"Should detect 'memorize' in: {msg}"
+            print(f"  ✓ '{msg}' → contains 'memorize' keyword")
 
-        # Should not trigger
+        # Negative cases - should NOT trigger (even if they look like preferences)
         negative_cases = [
+            "My name is Charles",  # No "memorize" keyword
+            "I prefer formal communication",  # No "memorize" keyword
+            "Call me Master Charles",  # No "memorize" keyword
+            "I am a sir",  # No "memorize" keyword
             "What's the weather like?",
             "Hello, how are you?",
             "Can you help me with Python?",
@@ -205,8 +209,8 @@ class TestHeuristics:
 
         for msg in negative_cases:
             result = might_contain_preferences(msg)
-            assert result is False, f"Should not detect preferences in: {msg}"
-            print(f"  ✓ '{msg}' → no preferences detected")
+            assert result is False, f"Should not detect preferences without 'memorize': {msg}"
+            print(f"  ✓ '{msg}' → no 'memorize' keyword detected")
 
 
 def run_tests():

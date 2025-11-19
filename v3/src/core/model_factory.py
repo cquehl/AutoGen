@@ -22,9 +22,14 @@ class ModelClientFactory:
     requirement for ModelClient objects with model_info attributes.
     """
 
+    # FIX: Add maximum cache size to prevent unbounded memory growth
+    MAX_CACHE_SIZE = 10
+
     def __init__(self):
         self.settings = get_settings()
-        self._client_cache = {}
+        # Use OrderedDict for LRU cache implementation
+        from collections import OrderedDict
+        self._client_cache = OrderedDict()
 
     def create_client(self, model: Optional[str] = None) -> ChatCompletionClient:
         """
@@ -42,10 +47,19 @@ class ModelClientFactory:
         # Check cache first
         if model_name in self._client_cache:
             logger.debug(f"Using cached client for {model_name}")
+            # Move to end for LRU tracking
+            self._client_cache.move_to_end(model_name)
             return self._client_cache[model_name]
 
         # Create new client based on model name
         client = self._create_client_for_model(model_name)
+
+        # FIX: Implement LRU eviction to prevent unbounded cache growth
+        # Remove oldest entry if cache is full
+        if len(self._client_cache) >= self.MAX_CACHE_SIZE:
+            oldest_key = next(iter(self._client_cache))
+            logger.debug(f"Cache full, evicting oldest client: {oldest_key}")
+            self._client_cache.pop(oldest_key)
 
         # Cache it
         self._client_cache[model_name] = client

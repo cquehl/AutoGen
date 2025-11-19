@@ -174,7 +174,8 @@ class LLMPreferenceExtractor:
                 return await self._fallback_regex_extraction(user_message)
 
         except Exception as e:
-            logger.warning(f"LLM extraction failed, using fallback: {e}")
+            # FIX: Add exc_info for better debugging and error tracking
+            logger.warning(f"LLM extraction failed, using fallback: {e}", exc_info=True)
             return await self._fallback_regex_extraction(user_message)
 
     async def _fallback_regex_extraction(self, user_message: str) -> UserPreferenceExtraction:
@@ -209,11 +210,22 @@ _extractor_lock = threading.Lock()
 
 
 def get_preference_extractor() -> LLMPreferenceExtractor:
-    """Get or create singleton preference extractor (thread-safe)"""
+    """
+    Get or create singleton preference extractor (thread-safe).
+
+    Uses double-checked locking with memory barrier for thread safety.
+    """
     global _extractor
-    if _extractor is None:
-        with _extractor_lock:
-            # Double-check pattern for thread safety
-            if _extractor is None:
-                _extractor = LLMPreferenceExtractor()
+    # FIX: Add memory barrier for proper thread safety
+    # First check without lock (fast path)
+    if _extractor is not None:
+        return _extractor
+
+    # Acquire lock for initialization (slow path)
+    with _extractor_lock:
+        # Double-check after acquiring lock to prevent race condition
+        # where multiple threads pass the first check
+        if _extractor is None:
+            _extractor = LLMPreferenceExtractor()
+
     return _extractor

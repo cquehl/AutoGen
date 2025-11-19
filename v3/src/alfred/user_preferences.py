@@ -188,23 +188,31 @@ class UserPreferencesManager:
             # Use LLM-based structured extraction
             try:
                 extractor = get_preference_extractor()
-                # Note: This is now synchronous - extract_preferences needs sync version
+                # FIX: Use asyncio.run() instead of creating new event loop
+                # This prevents event loop conflicts and race conditions
                 import asyncio
-                loop = asyncio.new_event_loop()
-                extracted = loop.run_until_complete(extractor.extract_preferences(user_message, use_llm=True))
-                loop.close()
+                try:
+                    # Try to get the current event loop
+                    loop = asyncio.get_running_loop()
+                    # If we're already in an async context, we can't use asyncio.run()
+                    # This should not happen in sync context, but guard against it
+                    logger.error("Cannot run async extraction from within async context")
+                    updated_prefs = self._update_with_regex(user_message)
+                except RuntimeError:
+                    # No event loop running - safe to use asyncio.run()
+                    extracted = asyncio.run(extractor.extract_preferences(user_message, use_llm=True))
 
-                # Update any extracted preferences
-                for field, value in extracted.to_dict().items():
-                    if value is not None:
-                        old_value = self.preferences.get(field)
-                        if old_value != value:
-                            self.preferences[field] = value
-                            updated_prefs[field] = value
-                            logger.info(f"Updated {field} preference to: {value}")
+                    # Update any extracted preferences
+                    for field, value in extracted.to_dict().items():
+                        if value is not None:
+                            old_value = self.preferences.get(field)
+                            if old_value != value:
+                                self.preferences[field] = value
+                                updated_prefs[field] = value
+                                logger.info(f"Updated {field} preference to: {value}")
 
             except Exception as e:
-                logger.warning(f"LLM extraction failed, falling back to regex: {e}")
+                logger.warning(f"LLM extraction failed, falling back to regex: {e}", exc_info=True)
                 # Fall back to regex extraction
                 updated_prefs = self._update_with_regex(user_message)
         else:
@@ -296,8 +304,11 @@ class UserPreferencesManager:
                         "user_id": self.user_id,
                         "session_id": self.session_id
                     })
-                    # Use deterministic IDs for deduplication
-                    ids.append(f"{self.user_id}_{key}")
+                    # FIX: Sanitize ID components to prevent injection attacks
+                    # Use only alphanumeric and underscore characters
+                    safe_user_id = re.sub(r'[^a-zA-Z0-9_]', '_', str(self.user_id))
+                    safe_key = re.sub(r'[^a-zA-Z0-9_]', '_', str(key))
+                    ids.append(f"{safe_user_id}_{safe_key}")
 
                 if documents:
                     self.vector_manager.add_memory(
@@ -349,7 +360,10 @@ class UserPreferencesManager:
 
             # Try to delete existing preference entries by deterministic IDs
             for key in self.preferences.keys():
-                pref_id = f"{self.user_id}_{key}"
+                # FIX: Sanitize ID components to prevent injection attacks
+                safe_user_id = re.sub(r'[^a-zA-Z0-9_]', '_', str(self.user_id))
+                safe_key = re.sub(r'[^a-zA-Z0-9_]', '_', str(key))
+                pref_id = f"{safe_user_id}_{safe_key}"
                 try:
                     collection.delete(ids=[pref_id])
                 except Exception:
