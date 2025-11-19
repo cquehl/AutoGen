@@ -136,17 +136,20 @@ class ToolRegistry:
             tool_kwargs["connection_pool"] = self.connection_pool
 
         # Inject services for META tools (introspection and system capabilities)
+        # Use introspection to only inject what the tool accepts
         if metadata.category == ToolCategory.META:
-            # Inject capability_service for tools that need system capability info
-            if self.capability_service:
+            import inspect
+            sig = inspect.signature(metadata.tool_class.__init__)
+            params = sig.parameters
+
+            # Only inject services that the tool actually accepts
+            if "capability_service" in params and self.capability_service:
                 tool_kwargs["capability_service"] = self.capability_service
 
-            # Inject history_service for tools that need access to history
-            if self.history_service:
+            if "history_service" in params and self.history_service:
                 tool_kwargs["history_service"] = self.history_service
 
-            # Inject agent_factory for tools that need to create/manage agents
-            if self.agent_factory:
+            if "agent_factory" in params and self.agent_factory:
                 tool_kwargs["agent_factory"] = self.agent_factory
 
         # Create tool instance
@@ -172,21 +175,13 @@ class ToolRegistry:
         # Note: We don't cache tool instances since they may have different configurations
         tool_instance = self.create_tool(name, **kwargs)
 
-        # Wrap in FunctionTool
-        async def wrapped_execute(**params):
-            """Execute tool with validation"""
-            # Validate parameters
-            is_valid, error = tool_instance.validate_params(**params)
-            if not is_valid:
-                return {"success": False, "error": f"Validation failed: {error}"}
-
-            # Execute tool
-            result = await tool_instance.execute(**params)
-            return result.to_dict()
-
-        # Create FunctionTool
+        # Create FunctionTool directly from tool's execute method
+        # AutoGen will automatically wrap it and extract the signature
+        # Note: AutoGen requires names with only letters, numbers, _ and -
+        safe_name = name.replace(".", "_")
         function_tool = FunctionTool(
-            wrapped_execute,
+            tool_instance.execute,
+            name=safe_name,
             description=tool_instance.DESCRIPTION,
         )
 
