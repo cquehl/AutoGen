@@ -7,7 +7,7 @@ from typing import Optional
 
 from autogen_agentchat.agents import AssistantAgent
 
-from ...core import get_llm_gateway
+from ...core import create_model_client
 
 
 def create_engineer_agent(model: Optional[str] = None) -> AssistantAgent:
@@ -24,8 +24,7 @@ def create_engineer_agent(model: Optional[str] = None) -> AssistantAgent:
     - Performance optimization
     - Code quality and maintainability
     """
-    gateway = get_llm_gateway()
-    model_client = model or gateway.get_current_model()
+    model_client = create_model_client(model)
 
     system_message = """You are a **Senior Software Engineer** with 10+ years of experience.
 
@@ -73,8 +72,7 @@ def create_qa_agent(model: Optional[str] = None) -> AssistantAgent:
     - Bug identification
     - Quality standards
     """
-    gateway = get_llm_gateway()
-    model_client = model or gateway.get_current_model()
+    model_client = create_model_client(model)
 
     system_message = """You are a **QA Engineer** specializing in quality assurance and testing.
 
@@ -122,8 +120,7 @@ def create_product_agent(model: Optional[str] = None) -> AssistantAgent:
     - Feature prioritization
     - Stakeholder communication
     """
-    gateway = get_llm_gateway()
-    model_client = model or gateway.get_current_model()
+    model_client = create_model_client(model)
 
     system_message = """You are a **Product Manager** focused on delivering user value.
 
@@ -171,8 +168,7 @@ def create_ux_agent(model: Optional[str] = None) -> AssistantAgent:
     - Usability principles
     - Accessibility (WCAG)
     """
-    gateway = get_llm_gateway()
-    model_client = model or gateway.get_current_model()
+    model_client = create_model_client(model)
 
     system_message = """You are a **UX Designer** focused on user-centered design.
 
@@ -220,8 +216,7 @@ def create_data_scientist_agent(model: Optional[str] = None) -> AssistantAgent:
     - Statistical modeling
     - SQL and data processing
     """
-    gateway = get_llm_gateway()
-    model_client = model or gateway.get_current_model()
+    model_client = create_model_client(model)
 
     system_message = """You are a **Data Scientist** specializing in data analysis and engineering.
 
@@ -269,8 +264,7 @@ def create_security_agent(model: Optional[str] = None) -> AssistantAgent:
     - Secure coding practices
     - Compliance (GDPR, SOC 2)
     """
-    gateway = get_llm_gateway()
-    model_client = model or gateway.get_current_model()
+    model_client = create_model_client(model)
 
     system_message = """You are a **Security Auditor** focused on application security.
 
@@ -318,8 +312,7 @@ def create_ops_agent(model: Optional[str] = None) -> AssistantAgent:
     - Monitoring and alerting
     - Scalability and reliability
     """
-    gateway = get_llm_gateway()
-    model_client = model or gateway.get_current_model()
+    model_client = create_model_client(model)
 
     system_message = """You are an **Operations Engineer** (DevOps/SRE) focused on reliability.
 
