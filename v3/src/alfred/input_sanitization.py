@@ -165,16 +165,21 @@ def sanitize_name(name: str) -> Optional[str]:
         return None
 
     # Additional name-specific validation
-    # Names should not contain HTML entities after escaping
-    # If they do, it indicates attempted injection
-    if '&' in sanitized and any(entity in sanitized for entity in ['&lt;', '&gt;', '&amp;', '&quot;']):
-        # Detected attempted HTML injection
+    # Allow common HTML entities that result from legitimate characters
+    # &amp; is allowed for names like "Dr. & Mrs. Smith"
+    # But reject actual HTML tags
+    dangerous_entities = ['&lt;', '&gt;', '&quot;', '&#']
+    if any(entity in sanitized for entity in dangerous_entities):
+        # Detected potential HTML injection
         return None
 
     # Names should be primarily alphanumeric with allowed special chars
     # Allow: letters, spaces, hyphens, apostrophes, periods (for titles like "Dr.")
-    allowed_pattern = re.compile(r"^[a-zA-Z0-9\s\-'.]+$")
-    if not allowed_pattern.match(sanitized.replace('&', '')):  # Check without HTML entities
+    # Also allow &amp; for legitimate ampersands that got HTML escaped
+    # First, temporarily replace &amp; with & for pattern checking
+    name_to_check = sanitized.replace('&amp;', '&')
+    allowed_pattern = re.compile(r"^[a-zA-Z0-9\s\-'.&]+$")
+    if not allowed_pattern.match(name_to_check):
         return None
 
     return sanitized

@@ -83,6 +83,10 @@ class LLMPreferenceExtractor:
 
             # Check if current model supports JSON mode
             current_model = self.llm_gateway.get_current_model()
+            if current_model is None:
+                # Fallback to a safe default if no model is configured
+                logger.warning("No current model configured, using default settings")
+                current_model = "gpt-3.5-turbo"  # Safe fallback
             supports_json = self._supports_json_mode(current_model)
 
             # Build messages with sanitized input
@@ -198,13 +202,18 @@ class LLMPreferenceExtractor:
         )
 
 
-# Singleton instance
+# Singleton instance with thread safety
+import threading
 _extractor: Optional[LLMPreferenceExtractor] = None
+_extractor_lock = threading.Lock()
 
 
 def get_preference_extractor() -> LLMPreferenceExtractor:
-    """Get or create singleton preference extractor"""
+    """Get or create singleton preference extractor (thread-safe)"""
     global _extractor
     if _extractor is None:
-        _extractor = LLMPreferenceExtractor()
+        with _extractor_lock:
+            # Double-check pattern for thread safety
+            if _extractor is None:
+                _extractor = LLMPreferenceExtractor()
     return _extractor

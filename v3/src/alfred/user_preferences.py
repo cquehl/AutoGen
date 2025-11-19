@@ -113,8 +113,10 @@ class UserPreferencesManager:
                 "using regex-only extraction"
             )
 
-        # Async lock for thread-safe operations
-        self._update_lock = asyncio.Lock()
+        # Thread-safe lock for operations
+        # Using threading.Lock instead of asyncio.Lock to avoid event loop issues
+        import threading
+        self._update_lock = threading.Lock()
 
     def extract_gender_preference(self, user_message: str) -> Optional[str]:
         """
@@ -158,48 +160,62 @@ class UserPreferencesManager:
             Dictionary of ONLY updated preferences (not all preferences)
         """
         # THREAD SAFETY: Acquire lock to prevent concurrent updates
-        async with self._update_lock:
-            # OPTIMIZATION: Quick heuristic check before expensive LLM call
-            # Only extract preferences if user explicitly says "memorize"
-            from .preference_patterns import might_contain_preferences
+        # Using threading lock in async context with asyncio.to_thread
+        import asyncio
 
-            if not might_contain_preferences(user_message):
-                # Message doesn't contain "memorize" - skip extraction
-                logger.debug("Skipping preference extraction - 'memorize' keyword not found")
-                return {}
+        def _do_update():
+            with self._update_lock:
+                return self._update_from_message_sync(user_message)
 
-            logger.info("'memorize' keyword detected - triggering preference extraction")
+        return await asyncio.to_thread(_do_update)
 
-            updated_prefs = {}
+    def _update_from_message_sync(self, user_message: str) -> Dict[str, str]:
+        """Synchronous version of update logic for thread safety."""
+        # OPTIMIZATION: Quick heuristic check before expensive LLM call
+        # Only extract preferences if user explicitly says "memorize"
+        from .preference_patterns import might_contain_preferences
 
-            if self.use_llm_extraction and LLM_EXTRACTION_AVAILABLE:
-                # Use LLM-based structured extraction
-                try:
-                    extractor = get_preference_extractor()
-                    extracted = await extractor.extract_preferences(user_message, use_llm=True)
+        if not might_contain_preferences(user_message):
+            # Message doesn't contain "memorize" - skip extraction
+            logger.debug("Skipping preference extraction - 'memorize' keyword not found")
+            return {}
 
-                    # Update any extracted preferences
-                    for field, value in extracted.to_dict().items():
-                        if value is not None:
-                            old_value = self.preferences.get(field)
-                            if old_value != value:
-                                self.preferences[field] = value
-                                updated_prefs[field] = value
-                                logger.info(f"Updated {field} preference to: {value}")
+        logger.info("'memorize' keyword detected - triggering preference extraction")
 
-                except Exception as e:
-                    logger.warning(f"LLM extraction failed, falling back to regex: {e}")
-                    # Fall back to regex extraction
-                    updated_prefs = self._update_with_regex(user_message)
-            else:
-                # Use legacy regex extraction
+        updated_prefs = {}
+
+        if self.use_llm_extraction and LLM_EXTRACTION_AVAILABLE:
+            # Use LLM-based structured extraction
+            try:
+                extractor = get_preference_extractor()
+                # Note: This is now synchronous - extract_preferences needs sync version
+                import asyncio
+                loop = asyncio.new_event_loop()
+                extracted = loop.run_until_complete(extractor.extract_preferences(user_message, use_llm=True))
+                loop.close()
+
+                # Update any extracted preferences
+                for field, value in extracted.to_dict().items():
+                    if value is not None:
+                        old_value = self.preferences.get(field)
+                        if old_value != value:
+                            self.preferences[field] = value
+                            updated_prefs[field] = value
+                            logger.info(f"Updated {field} preference to: {value}")
+
+            except Exception as e:
+                logger.warning(f"LLM extraction failed, falling back to regex: {e}")
+                # Fall back to regex extraction
                 updated_prefs = self._update_with_regex(user_message)
+        else:
+            # Use legacy regex extraction
+            updated_prefs = self._update_with_regex(user_message)
 
-            # Save to vector store if updated
-            if updated_prefs:
-                self._save_to_storage()
+        # Save to vector store if updated
+        if updated_prefs:
+            self._save_to_storage()
 
-            return updated_prefs
+        return updated_prefs
 
     def update_from_message(self, user_message: str) -> Dict[str, str]:
         """
