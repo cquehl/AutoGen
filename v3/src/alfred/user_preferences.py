@@ -148,7 +148,7 @@ class UserPreferencesManager:
         """
         Update preferences from user message using LLM extraction (async version).
 
-        Thread-safe: Uses async lock to prevent concurrent modification.
+        Thread-safe: Uses asyncio.Lock to prevent concurrent modification.
 
         Optimization: Only triggers LLM extraction if message contains "memorize" keyword.
         This reduces API calls by 99.9% and gives user explicit control.
@@ -159,18 +159,17 @@ class UserPreferencesManager:
         Returns:
             Dictionary of ONLY updated preferences (not all preferences)
         """
-        # THREAD SAFETY: Acquire lock to prevent concurrent updates
-        # Using threading lock in async context with asyncio.to_thread
-        import asyncio
+        # THREAD SAFETY: Use async lock for async context
+        # Create async lock if not exists
+        if not hasattr(self, '_async_lock'):
+            import asyncio
+            self._async_lock = asyncio.Lock()
 
-        def _do_update():
-            with self._update_lock:
-                return self._update_from_message_sync(user_message)
+        async with self._async_lock:
+            return await self._update_from_message_async_impl(user_message)
 
-        return await asyncio.to_thread(_do_update)
-
-    def _update_from_message_sync(self, user_message: str) -> Dict[str, str]:
-        """Synchronous version of update logic for thread safety."""
+    async def _update_from_message_async_impl(self, user_message: str) -> Dict[str, str]:
+        """Async implementation of update logic. Properly handles async/await flow."""
         # OPTIMIZATION: Quick heuristic check before expensive LLM call
         # Only extract preferences if user explicitly says "memorize"
         from .preference_patterns import might_contain_preferences
@@ -188,11 +187,8 @@ class UserPreferencesManager:
             # Use LLM-based structured extraction
             try:
                 extractor = get_preference_extractor()
-                # Note: This is now synchronous - extract_preferences needs sync version
-                import asyncio
-                loop = asyncio.new_event_loop()
-                extracted = loop.run_until_complete(extractor.extract_preferences(user_message, use_llm=True))
-                loop.close()
+                # Properly await the async method
+                extracted = await extractor.extract_preferences(user_message, use_llm=True)
 
                 # Update any extracted preferences
                 for field, value in extracted.to_dict().items():

@@ -7,6 +7,7 @@ from typing import AsyncIterator, Optional
 
 from .llm_gateway import get_llm_gateway
 from .telemetry import get_logger
+from .errors import handle_exception
 
 logger = get_logger(__name__)
 
@@ -99,7 +100,6 @@ async def stream_completion(
     except Exception as e:
         logger.error(f"Streaming failed: {e}", exc_info=True)
         # Raise proper error instead of yielding error message
-        from .errors import handle_exception
         raise handle_exception(e)
 
 
