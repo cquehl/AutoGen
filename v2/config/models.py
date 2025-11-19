@@ -611,36 +611,42 @@ class AppSettings(BaseSettings):
         return ChatCompletionClient.load_component(component_config)
 
 
-# Singleton instance (loaded on import)
+# Singleton instance with thread safety
+import threading
+
 _settings: Optional[AppSettings] = None
+_settings_lock = threading.Lock()
 
 
 def get_settings() -> AppSettings:
     """
-    Get application settings singleton.
+    Get application settings singleton with thread-safe initialization.
 
     Returns:
         AppSettings instance
     """
     global _settings
     if _settings is None:
-        # Temporarily remove conflicting environment variables
-        # Save original values
-        shell_backup = os.environ.get('SHELL')
-        allowed_ip_backup = os.environ.get('ALLOWED_IP')
+        with _settings_lock:
+            # Double-check after acquiring lock
+            if _settings is None:
+                # Temporarily remove conflicting environment variables
+                # Save original values
+                shell_backup = os.environ.get('SHELL')
+                allowed_ip_backup = os.environ.get('ALLOWED_IP')
 
-        # Remove them temporarily
-        os.environ.pop('SHELL', None)
-        os.environ.pop('ALLOWED_IP', None)
+                # Remove them temporarily
+                os.environ.pop('SHELL', None)
+                os.environ.pop('ALLOWED_IP', None)
 
-        try:
-            _settings = AppSettings()
-        finally:
-            # Restore original values
-            if shell_backup:
-                os.environ['SHELL'] = shell_backup
-            if allowed_ip_backup:
-                os.environ['ALLOWED_IP'] = allowed_ip_backup
+                try:
+                    _settings = AppSettings()
+                finally:
+                    # Restore original values
+                    if shell_backup:
+                        os.environ['SHELL'] = shell_backup
+                    if allowed_ip_backup:
+                        os.environ['ALLOWED_IP'] = allowed_ip_backup
 
     return _settings
 
@@ -664,6 +670,7 @@ def load_settings_from_yaml(yaml_path: Path) -> AppSettings:
 
 
 def reset_settings():
-    """Reset settings singleton (useful for testing)"""
+    """Reset settings singleton (useful for testing) - thread-safe"""
     global _settings
-    _settings = None
+    with _settings_lock:
+        _settings = None

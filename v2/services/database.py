@@ -191,17 +191,31 @@ class DatabaseService:
         connection_string: Optional[str] = None
     ) -> Dict[str, Any]:
         """Get table schema information"""
-        # Validate table name (alphanumeric and underscore only)
+        # Validate table name (alphanumeric and underscore only) - CRITICAL SECURITY
         import re
         if not re.match(r'^[a-zA-Z0-9_]+$', table_name):
             return {"success": False, "error": "Invalid table name"}
+
+        # Additional length check to prevent DOS
+        if len(table_name) > 64:  # Standard SQL identifier limit
+            return {"success": False, "error": "Table name too long"}
 
         # Determine database type
         conn_str = connection_string or self.pool.config.url
 
         # Use parameterized queries to prevent SQL injection
         if "sqlite" in conn_str:
-            # SQLite PRAGMA doesn't support parameters, but table name is validated
+            # SQLite PRAGMA doesn't support parameters, need to use whitelist approach
+            # First, get actual table list and validate against it
+            list_result = await self.list_tables(connection_string)
+            if not list_result.get("success"):
+                return list_result
+
+            actual_tables = list_result.get("tables", [])
+            if table_name not in actual_tables:
+                return {"success": False, "error": f"Table '{table_name}' not found"}
+
+            # Now safe to use table name after whitelist validation
             query = f"PRAGMA table_info({table_name})"
             params = None
         elif "postgresql" in conn_str:
@@ -209,7 +223,16 @@ class DatabaseService:
             query = "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = :table_name"
             params = {"table_name": table_name}
         elif "mysql" in conn_str:
-            # MySQL DESCRIBE doesn't support parameters, but table name is validated
+            # MySQL DESCRIBE doesn't support parameters, need whitelist approach
+            list_result = await self.list_tables(connection_string)
+            if not list_result.get("success"):
+                return list_result
+
+            actual_tables = list_result.get("tables", [])
+            if table_name not in actual_tables:
+                return {"success": False, "error": f"Table '{table_name}' not found"}
+
+            # Now safe to use table name after whitelist validation
             query = f"DESCRIBE {table_name}"
             params = None
         else:
