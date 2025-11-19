@@ -72,17 +72,35 @@ async def stream_completion(
             stream=True  # Enable streaming
         )
 
-        # Stream tokens
+        # Stream tokens with robust validation
         async for chunk in response:
-            if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
+            try:
+                # Validate chunk structure
+                if not hasattr(chunk, 'choices'):
+                    logger.warning(f"Unexpected chunk structure: {type(chunk)}")
+                    continue
+
+                if not chunk.choices or len(chunk.choices) == 0:
+                    continue
+
                 delta = chunk.choices[0].delta
-                if hasattr(delta, 'content') and delta.content:
+
+                # Validate delta has content
+                if hasattr(delta, 'content') and delta.content is not None:
                     yield delta.content
 
+            except (AttributeError, IndexError, TypeError) as chunk_error:
+                logger.warning(
+                    f"Malformed streaming chunk: {chunk_error}",
+                    chunk_type=type(chunk).__name__
+                )
+                continue
+
     except Exception as e:
-        logger.error(f"Streaming failed: {e}")
-        # Fall back to non-streaming
-        yield f"[Error: {str(e)}]"
+        logger.error(f"Streaming failed: {e}", exc_info=True)
+        # Raise proper error instead of yielding error message
+        from .errors import handle_exception
+        raise handle_exception(e)
 
 
 async def stream_with_thinking(

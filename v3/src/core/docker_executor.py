@@ -37,7 +37,7 @@ class DockerExecutor:
         self._initialize_client()
 
     def _initialize_client(self):
-        """Initialize Docker client"""
+        """Initialize Docker client - non-fatal if Docker unavailable"""
         if not self.settings.docker_enabled:
             logger.warning("Docker execution is disabled in configuration")
             return
@@ -48,18 +48,13 @@ class DockerExecutor:
             self.client.ping()
             logger.info("Docker client initialized successfully")
         except DockerException as e:
-            logger.error(f"Failed to initialize Docker client: {e}")
-            raise SuntoryError(
-                message="Docker is not available or not running",
-                severity="high",
-                recovery_suggestions=[
-                    "Start Docker Desktop or Docker daemon",
-                    "Ensure Docker is installed on your system",
-                    "Check Docker daemon is running: `docker ps`",
-                    "Set DOCKER_ENABLED=false in .env to disable (not recommended)"
-                ],
-                original_error=e
+            # Don't raise - log warning and allow graceful degradation
+            logger.warning(
+                f"Docker not available: {e}. "
+                "Code execution features will be disabled. "
+                "Start Docker daemon to enable."
             )
+            self.client = None
 
     def _ensure_image(self, image: str = "python:3.11-slim"):
         """Ensure Docker image is available"""
