@@ -22,7 +22,7 @@ class ShowHistoryTool(BaseTool):
 
     NAME = "alfred.show_history"
     DESCRIPTION = "Show recent actions, conversations, and tool executions. Use scope='session' for current session or scope='recent' for last N actions. Set limit to control number of items."
-    CATEGORY = ToolCategory.GENERAL
+    CATEGORY = ToolCategory.META
     VERSION = "1.0.0"
     REQUIRES_SECURITY_VALIDATION = False
 

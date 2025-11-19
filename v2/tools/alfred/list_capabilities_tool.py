@@ -21,7 +21,7 @@ class ListCapabilitiesTool(BaseTool):
 
     NAME = "alfred.list_capabilities"
     DESCRIPTION = "List available agents, teams, and tools in the Yamazaki system. Use category parameter to filter (agents, tools, teams, or all)."
-    CATEGORY = ToolCategory.GENERAL
+    CATEGORY = ToolCategory.META
     VERSION = "1.0.0"
     REQUIRES_SECURITY_VALIDATION = False
 

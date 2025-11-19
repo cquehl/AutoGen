@@ -22,7 +22,7 @@ class DelegateToTeamTool(BaseTool):
 
     NAME = "alfred.delegate_to_team"
     DESCRIPTION = "Delegate a task to a specific team (weather_team, data_team, magentic_one). Provide the task description and any relevant context."
-    CATEGORY = ToolCategory.GENERAL
+    CATEGORY = ToolCategory.META
     VERSION = "1.0.0"
     REQUIRES_SECURITY_VALIDATION = False
 

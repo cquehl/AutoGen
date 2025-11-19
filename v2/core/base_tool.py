@@ -17,6 +17,7 @@ class ToolCategory(str, Enum):
     FILE = "file"
     WEB = "web"
     WEATHER = "weather"
+    META = "meta"  # Introspection and system capability tools
     GENERAL = "general"
 
 

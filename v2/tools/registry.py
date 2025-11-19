@@ -135,17 +135,19 @@ class ToolRegistry:
         if metadata.category == ToolCategory.DATABASE:
             tool_kwargs["connection_pool"] = self.connection_pool
 
-        # Inject services for Alfred tools
-        if name.startswith("alfred."):
-            if name == "alfred.list_capabilities" and self.capability_service:
+        # Inject services for META tools (introspection and system capabilities)
+        if metadata.category == ToolCategory.META:
+            # Inject capability_service for tools that need system capability info
+            if self.capability_service:
                 tool_kwargs["capability_service"] = self.capability_service
-            elif name == "alfred.show_history" and self.history_service:
+
+            # Inject history_service for tools that need access to history
+            if self.history_service:
                 tool_kwargs["history_service"] = self.history_service
-            elif name == "alfred.delegate_to_team":
-                if self.agent_factory:
-                    tool_kwargs["agent_factory"] = self.agent_factory
-                if self.capability_service:
-                    tool_kwargs["capability_service"] = self.capability_service
+
+            # Inject agent_factory for tools that need to create/manage agents
+            if self.agent_factory:
+                tool_kwargs["agent_factory"] = self.agent_factory
 
         # Create tool instance
         tool = metadata.tool_class(**tool_kwargs)
