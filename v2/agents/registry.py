@@ -238,6 +238,20 @@ class AgentRegistry:
         except ImportError:
             pass
 
+        try:
+            from .alfred_agent import AlfredAgent
+            self.register(
+                name=AlfredAgent.NAME,
+                agent_class=AlfredAgent,
+                default_tools=[
+                    "alfred.list_capabilities",
+                    "alfred.show_history",
+                    "alfred.delegate_to_team"
+                ]
+            )
+        except ImportError:
+            pass
+
     def __repr__(self) -> str:
         return f"AgentRegistry(agents={len(self._agents)})"
 

@@ -18,16 +18,22 @@ class ToolRegistry:
     Provides plugin-based tool discovery, loading, and management.
     """
 
-    def __init__(self, security_middleware, connection_pool):
+    def __init__(self, security_middleware, connection_pool, capability_service=None, history_service=None, agent_factory=None):
         """
         Initialize tool registry.
 
         Args:
             security_middleware: Security middleware for validation
             connection_pool: Database connection pool manager
+            capability_service: Optional CapabilityService for Alfred tools
+            history_service: Optional HistoryService for Alfred tools
+            agent_factory: Optional AgentFactory for Alfred tools
         """
         self.security_middleware = security_middleware
         self.connection_pool = connection_pool
+        self.capability_service = capability_service
+        self.history_service = history_service
+        self.agent_factory = agent_factory
         self._tools: Dict[str, ToolMetadata] = {}
         self._tool_instances: Dict[str, BaseTool] = {}
 
@@ -128,6 +134,18 @@ class ToolRegistry:
         # Inject connection pool for database tools
         if metadata.category == ToolCategory.DATABASE:
             tool_kwargs["connection_pool"] = self.connection_pool
+
+        # Inject services for Alfred tools
+        if name.startswith("alfred."):
+            if name == "alfred.list_capabilities" and self.capability_service:
+                tool_kwargs["capability_service"] = self.capability_service
+            elif name == "alfred.show_history" and self.history_service:
+                tool_kwargs["history_service"] = self.history_service
+            elif name == "alfred.delegate_to_team":
+                if self.agent_factory:
+                    tool_kwargs["agent_factory"] = self.agent_factory
+                if self.capability_service:
+                    tool_kwargs["capability_service"] = self.capability_service
 
         # Create tool instance
         tool = metadata.tool_class(**tool_kwargs)
@@ -265,6 +283,26 @@ class ToolRegistry:
             List of unique categories
         """
         return list(set(m.category.value for m in self._tools.values()))
+
+    def set_alfred_services(self, capability_service, history_service, agent_factory):
+        """
+        Set services needed for Alfred's tools.
+
+        This is called after services are initialized to inject dependencies.
+
+        Args:
+            capability_service: CapabilityService instance
+            history_service: HistoryService instance
+            agent_factory: AgentFactory instance
+        """
+        self.capability_service = capability_service
+        self.history_service = history_service
+        self.agent_factory = agent_factory
+
+        # Clear cached Alfred tool instances so they get recreated with new services
+        for tool_name in list(self._tool_instances.keys()):
+            if tool_name.startswith("alfred."):
+                del self._tool_instances[tool_name]
 
     def discover_tools(self):
         """
