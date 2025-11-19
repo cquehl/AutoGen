@@ -44,8 +44,49 @@ class PathValidator:
             (is_valid, error_message, resolved_path) tuple
         """
         try:
-            # Resolve path (handles ~, .., symlinks, etc.)
-            path = Path(file_path).expanduser().resolve()
+            # First expand user without resolving symlinks
+            path = Path(file_path).expanduser()
+
+            # CRITICAL SECURITY: Check for symlinks before resolving
+            # This prevents symlink attacks to files outside allowed directories
+            if path.exists() and path.is_symlink():
+                # Check if the symlink itself is in allowed directory
+                symlink_allowed = False
+                for allowed_dir in self.allowed_directories:
+                    try:
+                        path.relative_to(allowed_dir)
+                        symlink_allowed = True
+                        break
+                    except ValueError:
+                        continue
+
+                if not symlink_allowed:
+                    return (
+                        False,
+                        f"Symlinks not allowed outside allowed directories: {file_path}",
+                        None
+                    )
+
+                # Now check if the target is also in allowed directories
+                target = path.resolve()
+                target_allowed = False
+                for allowed_dir in self.allowed_directories:
+                    try:
+                        target.relative_to(allowed_dir)
+                        target_allowed = True
+                        break
+                    except ValueError:
+                        continue
+
+                if not target_allowed:
+                    return (
+                        False,
+                        f"Symlink target outside allowed directories: {file_path}",
+                        None
+                    )
+
+            # Now safe to resolve the full path
+            path = path.resolve()
 
             # Check if path is within allowed directories
             allowed = False

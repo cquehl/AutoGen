@@ -488,8 +488,8 @@ async def interactive_loop():
     obs.initialize()
 
     # Setup signal handlers for graceful shutdown
-    # Get the current running event loop and register handlers early
     shutdown_event = asyncio.Event()
+    cleanup_completed = False
 
     def signal_handler(signum):
         """Handle shutdown signals gracefully."""
@@ -497,9 +497,15 @@ async def interactive_loop():
         shutdown_event.set()
 
     # Register handlers for SIGTERM and SIGINT early, before entering the main loop
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, lambda s=sig: signal_handler(s))
+    # CRITICAL: Only register signal handlers on Unix-like systems
+    if hasattr(signal, 'SIGTERM'):
+        try:
+            loop = asyncio.get_running_loop()
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                loop.add_signal_handler(sig, lambda s=sig: signal_handler(s))
+        except (RuntimeError, OSError) as e:
+            # Signal handling may not be available in some environments (Windows, testing)
+            logger.warning(f"Could not register signal handlers: {e}")
 
     # Current agent mode (alfred is default)
     current_agent = DEFAULT_AGENT
@@ -594,8 +600,17 @@ async def interactive_loop():
                 break
 
     finally:
-        # Cleanup
-        await container.dispose()
+        # CRITICAL: Ensure cleanup even if exception occurs
+        if not cleanup_completed:
+            console.print("\n[yellow]Cleaning up resources...[/yellow]")
+            try:
+                await asyncio.wait_for(container.dispose(), timeout=5.0)
+                cleanup_completed = True
+                logger.info("Container disposed successfully")
+            except asyncio.TimeoutError:
+                logger.error("Container disposal timed out after 5 seconds")
+            except Exception as e:
+                logger.error(f"Error during container disposal: {e}")
 
 
 def main():

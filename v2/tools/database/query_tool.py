@@ -80,8 +80,24 @@ class DatabaseQueryTool(BaseTool):
                         "message": f"{query_type.value} completed successfully",
                     })
 
+        except ImportError as e:
+            return ToolResult.error(f"Database driver not installed: {str(e)}")
+        except ConnectionRefusedError as e:
+            return ToolResult.error(f"Database connection refused: {str(e)}")
+        except TimeoutError as e:
+            return ToolResult.error(f"Database query timed out: {str(e)}")
+        except MemoryError as e:
+            return ToolResult.error(f"Query result too large, out of memory: {str(e)}")
+        except ValueError as e:
+            return ToolResult.error(f"Invalid query parameters: {str(e)}")
         except Exception as e:
-            return ToolResult.error(f"Query execution failed: {str(e)}")
+            # Log the full exception for debugging
+            import traceback
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Unexpected error in query execution: {traceback.format_exc()}")
+            # Return sanitized error to user (no internal details)
+            return ToolResult.error(f"Query execution failed: {e.__class__.__name__}")
 
     def validate_params(self, **kwargs) -> tuple[bool, Optional[str]]:
         """Validate parameters"""

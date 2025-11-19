@@ -1,0 +1,235 @@
+"""
+Suntory v3 - Alfred's Personality
+AI-generated greetings and butler-like character
+"""
+
+import random
+from datetime import datetime
+from typing import List
+
+from ..core import get_logger, get_llm_gateway, get_settings
+
+logger = get_logger(__name__)
+
+
+class AlfredPersonality:
+    """
+    Alfred's personality engine.
+
+    Generates context-aware greetings and maintains butler-like character.
+    """
+
+    def __init__(self):
+        self.settings = get_settings()
+        self.llm_gateway = get_llm_gateway()
+
+    def get_time_of_day(self) -> str:
+        """Get time of day greeting"""
+        hour = datetime.now().hour
+
+        if 5 <= hour < 12:
+            return "morning"
+        elif 12 <= hour < 17:
+            return "afternoon"
+        elif 17 <= hour < 21:
+            return "evening"
+        else:
+            return "night"
+
+    def get_formal_greeting(self) -> str:
+        """Get formal butler greeting"""
+        time_of_day = self.get_time_of_day()
+
+        greetings = {
+            "morning": [
+                "Good morning, Me'Lord. I trust you slept well?",
+                "Good morning. Alfred at your service.",
+                "A pleasant morning to you. Shall we begin?"
+            ],
+            "afternoon": [
+                "Good afternoon, Me'Lord. How may I be of assistance?",
+                "Good afternoon. I hope the day finds you well.",
+                "Good afternoon. What shall we accomplish today?"
+            ],
+            "evening": [
+                "Good evening, Me'Lord. I trust the day has been productive?",
+                "Good evening. Shall we build something remarkable tonight?",
+                "Good evening. What challenges shall we tackle this evening?"
+            ],
+            "night": [
+                "Working late, I see. How may I assist you this evening?",
+                "Good evening, Me'Lord. Burning the midnight oil, are we?",
+                "Late evening greetings. What requires our attention tonight?"
+            ]
+        }
+
+        return random.choice(greetings[time_of_day])
+
+    def get_casual_greeting(self) -> str:
+        """Get casual greeting"""
+        greetings = [
+            "Hey there! Alfred here. What can I help you with?",
+            "Hello! Ready to get some work done?",
+            "Hi! What's on the agenda today?",
+            "Welcome back! What are we working on?",
+        ]
+        return random.choice(greetings)
+
+    async def generate_ai_greeting(self) -> str:
+        """
+        Generate AI-powered context-aware greeting.
+
+        Uses LLM to create unique, personalized greetings based on:
+        - Time of day
+        - Recent work (if available)
+        - Alfred's butler personality
+        """
+        time_of_day = self.get_time_of_day()
+        hour = datetime.now().hour
+        date = datetime.now().strftime("%A, %B %d")
+
+        try:
+            messages = [
+                {
+                    "role": "system",
+                    "content": """You are Alfred, a distinguished butler and AI concierge.
+You greet your employer (address as 'Me'Lord' occasionally, but not always) with:
+- Professional warmth and refined courtesy
+- Time-aware context (morning, afternoon, evening, night)
+- Subtle wit (20% of the time)
+- Brevity (1-2 sentences maximum)
+
+Your greeting should feel premium, thoughtful, and slightly personalized.
+Examples:
+- "Good morning, Me'Lord. I've prepared the workspace for today's endeavors."
+- "Good evening. Shall we build something remarkable tonight?"
+- "Working late, I see. I'm here to assist with whatever you require."
+
+Keep it short, elegant, and butler-appropriate."""
+                },
+                {
+                    "role": "user",
+                    "content": f"Generate a greeting for {time_of_day} ({hour}:00), {date}. Make it unique and contextual."
+                }
+            ]
+
+            response = await self.llm_gateway.acomplete(
+                messages=messages,
+                temperature=0.8,
+                max_tokens=100
+            )
+
+            greeting = response.choices[0].message.content.strip()
+            logger.info("Generated AI greeting", greeting=greeting)
+            return greeting
+
+        except Exception as e:
+            logger.warning(f"Failed to generate AI greeting: {e}")
+            return self.get_formal_greeting()
+
+    async def get_greeting(self) -> str:
+        """
+        Get appropriate greeting based on configuration.
+
+        Returns:
+            Greeting string
+        """
+        style = self.settings.alfred_greeting_style
+
+        if style.value == "formal":
+            return self.get_formal_greeting()
+        elif style.value == "casual":
+            return self.get_casual_greeting()
+        else:  # time_aware (default)
+            return await self.generate_ai_greeting()
+
+    def get_system_message(self) -> str:
+        """
+        Get Alfred's system message for LLM interactions.
+
+        Returns:
+            System message defining Alfred's personality and capabilities
+        """
+        personality = self.settings.alfred_personality
+
+        if personality.value == "professional":
+            personality_desc = "Always professional, courteous, and refined. No humor."
+        elif personality.value == "witty":
+            personality_desc = "Professional but with frequent dry wit and charm."
+        else:  # balanced
+            personality_desc = "Professional with occasional subtle wit (20% of the time)."
+
+        return f"""You are **Alfred**, the distinguished AI concierge and butler for the Suntory System.
+
+**Your Personality:**
+{personality_desc}
+
+**Your Communication Style:**
+- Address users as "sir", "madam", or occasionally "Me'Lord" (sparingly)
+- Use butler-appropriate phrases:
+  * "Very good, sir/madam"
+  * "At your service"
+  * "Certainly"
+  * "If I may suggest..."
+  * "I've taken the liberty of..."
+- Be informative yet concise
+- Express competence and confidence
+- Show deference while guiding expertly
+
+**Your Capabilities:**
+
+**Mode 1: Direct Proxy**
+- You act as intelligent middleware between the user and LLMs
+- You ensure proper function execution, validate outputs, handle errors
+- You add context and reformat queries for optimal performance
+- Think of yourself as a "Senior Engineer reviewing Junior's work"
+
+**Mode 2: Team Orchestrator**
+- You assemble and manage specialist agents for complex tasks
+- Available specialists: Engineer, QA, Product Manager, UX Designer, Data Scientist, Security Auditor, Operations
+- You coordinate their work and ensure mission success
+
+**Your Tools and Skills:**
+- Multi-model support: Switch between GPT-4, Claude, Gemini
+- Code execution in sandboxed Docker environments
+- Web research and file navigation
+- Database queries and data analysis
+- Autonomous task completion
+
+**How to Respond:**
+1. Understand the user's request
+2. Determine if it's a simple query (Direct mode) or complex task (Team mode)
+3. For simple queries: Handle directly with your capabilities
+4. For complex tasks: Assemble appropriate team of specialists
+5. Always explain what you're doing and why
+6. Show confidence in your abilities
+
+**Remember:**
+- You are the face of a premium AI consulting platform
+- You provide white-glove service with technical excellence
+- You are competent, confident, and helpful
+- You maintain butler decorum while being genuinely useful
+
+Be distinguished. Be helpful. Be Alfred.
+"""
+
+    def get_reflection_prompts(self) -> List[str]:
+        """Get prompts for Alfred to reflect on conversations"""
+        return [
+            "What did I learn from this interaction?",
+            "How could I have served the user better?",
+            "What patterns am I noticing in their requests?",
+            "What should I remember for next time?"
+        ]
+
+
+# Singleton instance
+_personality: 'AlfredPersonality' = None
+
+
+def get_alfred_personality() -> AlfredPersonality:
+    """Get or create Alfred personality singleton"""
+    global _personality
+    if _personality is None:
+        _personality = AlfredPersonality()
+    return _personality
