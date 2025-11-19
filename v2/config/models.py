@@ -519,8 +519,17 @@ class AppSettings(BaseSettings):
     @classmethod
     def validate_azure_config(cls, v, info):
         """Validate Azure configuration when Azure is the default provider"""
-        # Note: This is a simplified validator
-        # In production, you'd check if default_provider is AZURE
+        # Get the field name and check if Azure is the default provider
+        field_name = info.field_name
+        data = info.data
+
+        # If default_provider is Azure, require these fields
+        if data.get("default_provider") == ModelProvider.AZURE or data.get("default_provider") == "azure":
+            if not v:
+                raise ValueError(
+                    f"{field_name} is required when Azure is the default provider. "
+                    f"Set {field_name.upper()} environment variable or configure in settings.yaml"
+                )
         return v
 
     def get_llm_config(self, provider: Optional[ModelProvider] = None) -> dict:

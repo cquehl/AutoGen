@@ -2,17 +2,30 @@
 Agent memory system for maintaining context and state.
 
 FIXED: Async file I/O with proper locking for concurrent access.
+Platform compatibility: Works on Unix/Linux/macOS and Windows.
 """
 
 import json
 import asyncio
-import fcntl
+import sys
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
 from collections import OrderedDict
+
+# Platform-specific imports for file locking
+# fcntl is Unix/Linux/macOS only, use msvcrt on Windows
+if sys.platform == "win32":
+    import msvcrt
+    HAS_FCNTL = False
+else:
+    try:
+        import fcntl
+        HAS_FCNTL = True
+    except ImportError:
+        HAS_FCNTL = False
 
 from ..observability.logger import get_logger
 
@@ -189,6 +202,27 @@ class FileStore(MemoryStore):
 
         logger.debug(f"Saved memory for {agent_id}: {key}")
 
+    def _lock_file(self, file_obj, exclusive: bool = True):
+        """Platform-independent file locking."""
+        if sys.platform == "win32":
+            # Windows: use msvcrt
+            msvcrt.locking(file_obj.fileno(), msvcrt.LK_LOCK if exclusive else msvcrt.LK_NBLCK, 1)
+        elif HAS_FCNTL:
+            # Unix/Linux/macOS: use fcntl
+            fcntl.flock(file_obj.fileno(), fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+        else:
+            # No locking available - log warning
+            logger.warning("File locking not available on this platform")
+
+    def _unlock_file(self, file_obj):
+        """Platform-independent file unlocking."""
+        if sys.platform == "win32":
+            # Windows: use msvcrt
+            msvcrt.locking(file_obj.fileno(), msvcrt.LK_UNLCK, 1)
+        elif HAS_FCNTL:
+            # Unix/Linux/macOS: use fcntl
+            fcntl.flock(file_obj.fileno(), fcntl.LOCK_UN)
+
     def _save_sync(self, file_path: Path, key: str, value: Any, metadata: Optional[Dict]):
         """Synchronous save with file locking."""
         # Use exclusive lock for write
@@ -196,7 +230,7 @@ class FileStore(MemoryStore):
 
         with open(file_path, mode) as f:
             # Acquire exclusive lock
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            self._lock_file(f, exclusive=True)
 
             try:
                 # Load existing data
@@ -222,7 +256,7 @@ class FileStore(MemoryStore):
 
             finally:
                 # Release lock
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                self._unlock_file(f)
 
     async def load(self, agent_id: str, key: str) -> Optional[Any]:
         """Load from file with proper locking."""
@@ -239,7 +273,7 @@ class FileStore(MemoryStore):
         """Synchronous load with file locking."""
         with open(file_path, "r") as f:
             # Acquire shared lock for read
-            fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+            self._lock_file(f, exclusive=False)
 
             try:
                 data = json.load(f)
@@ -249,7 +283,7 @@ class FileStore(MemoryStore):
             except json.JSONDecodeError as e:
                 logger.error(f"Error loading memory: {e}")
             finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                self._unlock_file(f)
 
         return None
 
@@ -267,7 +301,7 @@ class FileStore(MemoryStore):
     def _load_all_sync(self, file_path: Path) -> Dict[str, Any]:
         """Synchronous load all with file locking."""
         with open(file_path, "r") as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+            self._lock_file(f, exclusive=False)
 
             try:
                 data = json.load(f)
@@ -279,7 +313,7 @@ class FileStore(MemoryStore):
                 logger.error(f"Error loading all memory: {e}")
                 return {}
             finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                self._unlock_file(f)
 
     async def delete(self, agent_id: str, key: str):
         """Delete from file with proper locking."""
@@ -295,7 +329,7 @@ class FileStore(MemoryStore):
     def _delete_sync(self, file_path: Path, key: str):
         """Synchronous delete with file locking."""
         with open(file_path, "r+") as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            self._lock_file(f, exclusive=True)
 
             try:
                 data = json.load(f)
@@ -308,7 +342,7 @@ class FileStore(MemoryStore):
             except json.JSONDecodeError as e:
                 logger.error(f"Error deleting memory: {e}")
             finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                self._unlock_file(f)
 
     async def clear(self, agent_id: str):
         """Clear file."""

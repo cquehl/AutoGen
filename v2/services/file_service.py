@@ -113,7 +113,7 @@ class FileService:
         pattern: str = "*"
     ) -> Dict[str, Any]:
         """
-        List directory contents.
+        List directory contents with security validation.
 
         Args:
             directory_path: Directory path
@@ -122,9 +122,15 @@ class FileService:
         Returns:
             Directory listing or error
         """
-        try:
-            path = Path(directory_path).expanduser()
+        # Get path validator
+        validator = self.security.get_path_validator()
 
+        # Validate directory path
+        is_valid, error, path = validator.validate(directory_path, operation="read")
+        if not is_valid:
+            return {"success": False, "error": error, "directory_path": directory_path}
+
+        try:
             if not path.exists():
                 return {"success": False, "error": f"Directory not found: {directory_path}"}
 

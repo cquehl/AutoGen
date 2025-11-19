@@ -166,11 +166,9 @@ class ToolRegistry:
         if name not in self._tools:
             return None
 
-        # Create or get cached tool instance
-        if name not in self._tool_instances:
-            self._tool_instances[name] = self.create_tool(name, **kwargs)
-
-        tool_instance = self._tool_instances[name]
+        # Create fresh tool instance with provided kwargs
+        # Note: We don't cache tool instances since they may have different configurations
+        tool_instance = self.create_tool(name, **kwargs)
 
         # Wrap in FunctionTool
         async def wrapped_execute(**params):

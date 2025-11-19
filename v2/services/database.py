@@ -189,7 +189,7 @@ class DatabaseService:
         connection_string: Optional[str] = None
     ) -> Dict[str, Any]:
         """Get table schema information"""
-        # Validate table name
+        # Validate table name (alphanumeric and underscore only)
         import re
         if not re.match(r'^[a-zA-Z0-9_]+$', table_name):
             return {"success": False, "error": "Invalid table name"}
@@ -197,16 +197,23 @@ class DatabaseService:
         # Determine database type
         conn_str = connection_string or self.pool.config.url
 
+        # Use parameterized queries to prevent SQL injection
         if "sqlite" in conn_str:
+            # SQLite PRAGMA doesn't support parameters, but table name is validated
             query = f"PRAGMA table_info({table_name})"
+            params = None
         elif "postgresql" in conn_str:
-            query = f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{table_name}'"
+            # Use parameterized query for PostgreSQL
+            query = "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = :table_name"
+            params = {"table_name": table_name}
         elif "mysql" in conn_str:
+            # MySQL DESCRIBE doesn't support parameters, but table name is validated
             query = f"DESCRIBE {table_name}"
+            params = None
         else:
             return {"success": False, "error": "Unsupported database type"}
 
-        result = await self.execute_query(query, connection_string=connection_string)
+        result = await self.execute_query(query, params=params, connection_string=connection_string)
 
         if result.get("success"):
             return {"success": True, "table": table_name, "schema": result["results"]}

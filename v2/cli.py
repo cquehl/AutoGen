@@ -493,6 +493,20 @@ async def interactive_loop():
     obs = container.get_observability_manager()
     obs.initialize()
 
+    # Setup signal handlers for graceful shutdown
+    # Get the current running event loop and register handlers early
+    shutdown_event = asyncio.Event()
+
+    def signal_handler(signum):
+        """Handle shutdown signals gracefully."""
+        logger.info(f"Received signal {signum}, initiating graceful shutdown")
+        shutdown_event.set()
+
+    # Register handlers for SIGTERM and SIGINT early, before entering the main loop
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, lambda s=sig: signal_handler(s))
+
     # Current agent mode (alfred is default)
     current_agent = DEFAULT_AGENT
 
