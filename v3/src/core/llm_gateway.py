@@ -35,12 +35,38 @@ class LLMGateway:
 
     def __init__(self):
         self.settings = get_settings()
-        self.current_model = self.settings.default_model
+        self.current_model = self._normalize_model_name(self.settings.default_model)
         self._setup_providers()
 
         # Disable LiteLLM's verbose logging
         litellm.suppress_debug_info = True
         litellm.set_verbose = False
+
+    def _normalize_model_name(self, model: str) -> str:
+        """
+        Normalize model name for LiteLLM.
+
+        For Azure OpenAI deployments, ensure they have the 'azure/' prefix.
+        This allows LiteLLM to correctly route to Azure OpenAI.
+
+        Args:
+            model: Model name or Azure deployment name
+
+        Returns:
+            Normalized model name with proper provider prefix
+        """
+        # Skip if already has a provider prefix
+        if "/" in model:
+            return model
+
+        # If Azure is configured and model matches deployment name, add azure/ prefix
+        if (self.settings.azure_openai_api_key and
+            self.settings.azure_openai_deployment_name and
+            model == self.settings.azure_openai_deployment_name):
+            logger.info(f"Normalizing Azure deployment name: {model} -> azure/{model}")
+            return f"azure/{model}"
+
+        return model
 
     def _setup_providers(self):
         """Configure API keys for all providers"""
@@ -75,8 +101,8 @@ class LLMGateway:
             Previous model name
         """
         previous_model = self.current_model
-        self.current_model = model
-        logger.info(f"Switched model from {previous_model} to {model}")
+        self.current_model = self._normalize_model_name(model)
+        logger.info(f"Switched model from {previous_model} to {self.current_model}")
         return previous_model
 
     def get_current_model(self) -> str:
@@ -111,7 +137,7 @@ class LLMGateway:
         Returns:
             LiteLLM completion response
         """
-        model_to_use = model or self.current_model
+        model_to_use = self._normalize_model_name(model) if model else self.current_model
 
         try:
             logger.debug(
@@ -179,7 +205,7 @@ class LLMGateway:
         Returns:
             LiteLLM completion response
         """
-        model_to_use = model or self.current_model
+        model_to_use = self._normalize_model_name(model) if model else self.current_model
 
         try:
             logger.debug(
