@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # Agent Sandbox Environment
+  # All code execution happens here, isolated from host
+  agent-sandbox:
+    image: python:3.11-slim
+    container_name: suntory-agent-sandbox
+    working_dir: /workspace
+    volumes:
+      - ./workspace:/workspace
+      - ./data:/data:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SANDBOX_MODE=true
+    command: tail -f /dev/null  # Keep container running
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+    mem_limit: 2g
+    cpus: 2
+    networks:
+      - suntory-network
+
+  # ChromaDB for Vector Storage (Agent Memory)
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: suntory-chromadb
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/chroma:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    networks:
+      - suntory-network
+    restart: unless-stopped
+
+  # Prometheus for Metrics (Optional - for production)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: suntory-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - suntory-network
+    restart: unless-stopped
+    profiles:
+      - observability
+
+  # Grafana for Visualization (Optional - for production)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: suntory-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - suntory-network
+    restart: unless-stopped
+    profiles:
+      - observability
+
+networks:
+  suntory-network:
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data:
