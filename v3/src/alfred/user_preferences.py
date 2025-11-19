@@ -3,12 +3,73 @@ Suntory v3 - User Preferences Manager
 Extract and store user preferences from conversation
 """
 
+import asyncio
 import re
+import time
 from typing import Dict, Optional
 
-from ..core import get_logger, get_vector_manager
+import chromadb.errors
+
+from ..core import get_logger, get_settings, get_vector_manager
+from .preference_errors import PreferenceStorageError
 
 logger = get_logger(__name__)
+
+
+def get_privacy_notice() -> str:
+    """
+    Get user preference privacy notice.
+
+    Returns:
+        Formatted privacy notice
+    """
+    settings = get_settings()
+
+    notice = """**User Preference Privacy Notice**
+
+When you share preferences (name, communication style, etc.), here's how they're handled:
+
+**Data Collection:**
+  • Preferences are extracted from your messages
+  • Stored locally on your device (ChromaDB)
+  • NOT shared with third parties
+
+**LLM Processing:**"""
+
+    if settings.enable_llm_preference_extraction:
+        notice += """
+  • ⚠️ Messages MAY be sent to your LLM provider for extraction
+  • Subject to provider's privacy policy (OpenAI, Anthropic, Google)
+  • To disable: Set ENABLE_LLM_PREFERENCE_EXTRACTION=false in .env"""
+    else:
+        notice += """
+  • ✅ LLM extraction DISABLED - uses local regex patterns only
+  • Your messages are NOT sent to LLM providers for preference extraction"""
+
+    notice += f"""
+
+**Data Retention:**
+  • Preferences retained for {settings.preference_retention_days} days"""
+
+    if settings.preference_retention_days == 0:
+        notice += " (forever)"
+
+    notice += """
+
+**Your Rights:**
+  • View preferences: `/preferences view`
+  • Update preferences: `/preferences set key=value`
+  • Delete all: `/preferences reset`
+
+**Security:**
+  • Input sanitization protects against injection attacks
+  • HTML escaping prevents XSS
+  • No encryption at rest (local storage only)
+
+For questions about privacy, see: https://github.com/your-org/suntory-v3/blob/main/PRIVACY.md
+"""
+
+    return notice
 
 # Import LLM extractor (will be None if import fails, allowing fallback)
 try:
@@ -37,8 +98,23 @@ class UserPreferencesManager:
         self.vector_manager = get_vector_manager()
         # Use user_id for cross-session persistence
         self.preferences_collection = f"user_preferences_{self.user_id}"
-        # LLM extraction mode
-        self.use_llm_extraction = use_llm_extraction and LLM_EXTRACTION_AVAILABLE
+
+        # LLM extraction mode - respect privacy settings
+        settings = get_settings()
+        self.use_llm_extraction = (
+            use_llm_extraction and
+            LLM_EXTRACTION_AVAILABLE and
+            settings.enable_llm_preference_extraction
+        )
+
+        if not settings.enable_llm_preference_extraction:
+            logger.info(
+                "LLM preference extraction disabled by privacy settings, "
+                "using regex-only extraction"
+            )
+
+        # Async lock for thread-safe operations
+        self._update_lock = asyncio.Lock()
 
     def extract_gender_preference(self, user_message: str) -> Optional[str]:
         """
@@ -50,32 +126,8 @@ class UserPreferencesManager:
         Returns:
             'male', 'female', or None if not detected
         """
-        message_lower = user_message.lower()
-
-        # Explicit statements
-        if any(phrase in message_lower for phrase in [
-            "i am a sir",
-            "i'm a sir",
-            "call me sir",
-            "i am male",
-            "i'm male",
-            "i am not a madam",
-            "not madam"
-        ]):
-            return "male"
-
-        if any(phrase in message_lower for phrase in [
-            "i am a madam",
-            "i'm a madam",
-            "call me madam",
-            "i am female",
-            "i'm female",
-            "i am not a sir",
-            "not sir"
-        ]):
-            return "female"
-
-        return None
+        from .preference_patterns import extract_gender_preference as extract_gender
+        return extract_gender(user_message)
 
     def extract_name(self, user_message: str) -> Optional[str]:
         """
@@ -87,39 +139,14 @@ class UserPreferencesManager:
         Returns:
             Name if detected, None otherwise
         """
-        # Patterns supporting multi-word names (titles + names)
-        # Case-preserving patterns to capture "Master Charles", "Dr. Smith", etc.
-        patterns = [
-            # Multi-word with titles: "Master Charles", "Dr. Smith", "Mr. John Doe"
-            r"(?:my name is|call me|i'?m) ((?:Master|Mister|Mr\.?|Miss|Ms\.?|Mrs\.?|Dr\.?|Professor|Prof\.?) [A-Z][a-z]+(?: [A-Z][a-z]+)*)",
-            # Multi-word names: "John Smith", "Mary Jane Watson"
-            r"my name is ([A-Z][a-z]+(?: [A-Z][a-z]+)+)",
-            # Single word with capital (proper names): "Charles", "Alice"
-            r"(?:my name is|call me) ([A-Z][a-z]+)",
-            # Lowercase patterns (will capitalize): "my name is john"
-            r"my name is ([a-z]+)",
-            r"call me ([a-z]+)",
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, user_message, re.IGNORECASE)
-            if match:
-                name = match.group(1).strip()
-                # Avoid common false positives
-                name_lower = name.lower()
-                blacklist = ["a", "not", "the", "sir", "madam", "male", "female", "tired", "busy"]
-                if name_lower not in blacklist and len(name) <= 100:
-                    # Capitalize properly if all lowercase
-                    if name.islower():
-                        return name.capitalize()
-                    # Preserve existing capitalization (for titles)
-                    return name
-
-        return None
+        from .preference_patterns import extract_name as extract_name_pattern
+        return extract_name_pattern(user_message, max_length=100)
 
     async def update_from_message_async(self, user_message: str) -> Dict[str, str]:
         """
         Update preferences from user message using LLM extraction (async version).
+
+        Thread-safe: Uses async lock to prevent concurrent modification.
 
         Args:
             user_message: User's message
@@ -127,36 +154,38 @@ class UserPreferencesManager:
         Returns:
             Dictionary of ONLY updated preferences (not all preferences)
         """
-        updated_prefs = {}
+        # THREAD SAFETY: Acquire lock to prevent concurrent updates
+        async with self._update_lock:
+            updated_prefs = {}
 
-        if self.use_llm_extraction and LLM_EXTRACTION_AVAILABLE:
-            # Use LLM-based structured extraction
-            try:
-                extractor = get_preference_extractor()
-                extracted = await extractor.extract_preferences(user_message, use_llm=True)
+            if self.use_llm_extraction and LLM_EXTRACTION_AVAILABLE:
+                # Use LLM-based structured extraction
+                try:
+                    extractor = get_preference_extractor()
+                    extracted = await extractor.extract_preferences(user_message, use_llm=True)
 
-                # Update any extracted preferences
-                for field, value in extracted.to_dict().items():
-                    if value is not None:
-                        old_value = self.preferences.get(field)
-                        if old_value != value:
-                            self.preferences[field] = value
-                            updated_prefs[field] = value
-                            logger.info(f"Updated {field} preference to: {value}")
+                    # Update any extracted preferences
+                    for field, value in extracted.to_dict().items():
+                        if value is not None:
+                            old_value = self.preferences.get(field)
+                            if old_value != value:
+                                self.preferences[field] = value
+                                updated_prefs[field] = value
+                                logger.info(f"Updated {field} preference to: {value}")
 
-            except Exception as e:
-                logger.warning(f"LLM extraction failed, falling back to regex: {e}")
-                # Fall back to regex extraction
+                except Exception as e:
+                    logger.warning(f"LLM extraction failed, falling back to regex: {e}")
+                    # Fall back to regex extraction
+                    updated_prefs = self._update_with_regex(user_message)
+            else:
+                # Use legacy regex extraction
                 updated_prefs = self._update_with_regex(user_message)
-        else:
-            # Use legacy regex extraction
-            updated_prefs = self._update_with_regex(user_message)
 
-        # Save to vector store if updated
-        if updated_prefs:
-            self._save_to_storage()
+            # Save to vector store if updated
+            if updated_prefs:
+                self._save_to_storage()
 
-        return updated_prefs
+            return updated_prefs
 
     def update_from_message(self, user_message: str) -> Dict[str, str]:
         """
@@ -207,43 +236,79 @@ class UserPreferencesManager:
 
         return updated_prefs
 
-    def _save_to_storage(self):
-        """Save preferences to vector storage with deduplication"""
-        try:
-            # First, delete existing preferences for this user to avoid duplicates
-            self._delete_existing_preferences()
+    def _save_to_storage(self, max_retries: int = 3):
+        """
+        Save preferences to vector storage with deduplication and retry logic.
 
-            # Store each preference as a searchable document
-            documents = []
-            metadatas = []
-            ids = []
+        Args:
+            max_retries: Maximum number of retry attempts
 
-            for key, value in self.preferences.items():
-                documents.append(f"User preference: {key} = {value}")
-                metadatas.append({
-                    "preference_type": key,
-                    "preference_value": value,
-                    "user_id": self.user_id,
-                    "session_id": self.session_id
-                })
-                # Use deterministic IDs for deduplication
-                ids.append(f"{self.user_id}_{key}")
+        Raises:
+            PreferenceStorageError: If save fails after all retries
+        """
+        last_error = None
 
-            if documents:
-                self.vector_manager.add_memory(
-                    collection_name=self.preferences_collection,
-                    documents=documents,
-                    metadatas=metadatas,
-                    ids=ids
+        for attempt in range(max_retries):
+            try:
+                # First, delete existing preferences for this user to avoid duplicates
+                self._delete_existing_preferences()
+
+                # Store each preference as a searchable document
+                documents = []
+                metadatas = []
+                ids = []
+
+                for key, value in self.preferences.items():
+                    documents.append(f"User preference: {key} = {value}")
+                    metadatas.append({
+                        "preference_type": key,
+                        "preference_value": value,
+                        "user_id": self.user_id,
+                        "session_id": self.session_id
+                    })
+                    # Use deterministic IDs for deduplication
+                    ids.append(f"{self.user_id}_{key}")
+
+                if documents:
+                    self.vector_manager.add_memory(
+                        collection_name=self.preferences_collection,
+                        documents=documents,
+                        metadatas=metadatas,
+                        ids=ids
+                    )
+                    logger.info(
+                        "Saved user preferences to storage",
+                        user_id=self.user_id,
+                        preferences=self.preferences,
+                        attempt=attempt + 1
+                    )
+
+                # Success - return
+                return
+
+            except chromadb.errors.ChromaError as e:
+                last_error = e
+                logger.warning(
+                    f"ChromaDB error saving preferences (attempt {attempt + 1}/{max_retries}): {e}"
                 )
-                logger.info(
-                    "Saved user preferences to storage",
-                    user_id=self.user_id,
-                    preferences=self.preferences
-                )
+                if attempt < max_retries - 1:
+                    # Exponential backoff: 0.5s, 1s, 2s
+                    sleep_time = 0.5 * (2 ** attempt)
+                    time.sleep(sleep_time)
+                else:
+                    # Last attempt failed
+                    raise PreferenceStorageError(
+                        f"Failed to save preferences to storage after {max_retries} attempts: {e}",
+                        retriable=True
+                    )
 
-        except Exception as e:
-            logger.warning(f"Failed to save preferences: {e}")
+            except Exception as e:
+                last_error = e
+                logger.error(f"Unexpected error saving preferences: {e}", exc_info=True)
+                raise PreferenceStorageError(
+                    f"Unexpected error saving preferences: {e}",
+                    retriable=False
+                )
 
     def _delete_existing_preferences(self):
         """Delete existing preferences to enable deduplication"""

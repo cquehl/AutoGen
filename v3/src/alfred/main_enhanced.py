@@ -22,7 +22,8 @@ from ..core import (
 )
 from .modes import AlfredMode, get_direct_mode, get_team_mode
 from .personality import get_alfred_personality
-from .user_preferences import UserPreferencesManager
+from .preference_errors import PreferenceStorageError
+from .user_preferences import UserPreferencesManager, get_privacy_notice
 
 logger = get_logger(__name__)
 
@@ -166,14 +167,19 @@ class AlfredEnhanced:
             await self._add_to_history("user", user_message)
 
             # Update user preferences from message (async version with LLM extraction)
-            updated_prefs = await self.preferences_manager.update_from_message_async(user_message)
-            if updated_prefs:
-                # Acknowledge preference update (only show what changed)
-                confirmation = self.preferences_manager.get_confirmation_message(
-                    updated_prefs
-                )
-                if confirmation:
-                    yield confirmation + "\n\n"
+            try:
+                updated_prefs = await self.preferences_manager.update_from_message_async(user_message)
+                if updated_prefs:
+                    # Acknowledge preference update (only show what changed)
+                    confirmation = self.preferences_manager.get_confirmation_message(
+                        updated_prefs
+                    )
+                    if confirmation:
+                        yield confirmation + "\n\n"
+            except PreferenceStorageError as e:
+                # Storage failed - warn user but continue
+                logger.error(f"Preference storage error: {e}")
+                yield f"\n{e.format_for_user()}\n\n"
 
             # Check for commands (non-streaming)
             if user_message.startswith("/"):
@@ -336,6 +342,8 @@ class AlfredEnhanced:
                 return await self._cmd_show_history()
             elif cmd == "/preferences":
                 return await self._cmd_preferences(args)
+            elif cmd == "/privacy":
+                return get_privacy_notice()
             elif cmd == "/help":
                 return self._cmd_help()
             elif cmd == "/clear":
@@ -611,10 +619,11 @@ class AlfredEnhanced:
   `/budget` - Display current budget limits
   `/budget <daily|monthly> <amount>` - Set spending limits
 
-**👤 Preferences:**
+**👤 Preferences & Privacy:**
   `/preferences` - View your current preferences
   `/preferences set <key>=<value>` - Set a preference manually
   `/preferences reset` - Clear all preferences
+  `/privacy` - View privacy notice and data handling policy
 
 **⚙️ Mode & History:**
   `/mode` - Show current operating mode (Direct/Team)

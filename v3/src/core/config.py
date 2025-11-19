@@ -174,6 +174,20 @@ class SuntorySettings(BaseSettings):
     )
 
     # =================================================================
+    # User Preference Privacy Settings
+    # =================================================================
+
+    enable_llm_preference_extraction: bool = Field(
+        default=True,
+        description="Enable LLM-based preference extraction (sends data to LLM provider)"
+    )
+
+    preference_retention_days: int = Field(
+        default=365,
+        description="Number of days to retain user preferences (0 = forever)"
+    )
+
+    # =================================================================
     # Validators
     # =================================================================
 
