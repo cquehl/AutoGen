@@ -224,9 +224,135 @@ class ValidationError(SuntoryError):
         )
 
 
+# ============================================================================
+# PRIVATE HELPER: Provider Detection
+# ============================================================================
+
+def _extract_provider(error_str: str) -> str:
+    """
+    Extract provider name from error message.
+
+    Args:
+        error_str: Lowercase error message string
+
+    Returns:
+        Provider name or default
+    """
+    if "anthropic" in error_str:
+        return "Anthropic"
+    elif "google" in error_str or "gemini" in error_str:
+        return "Google"
+    elif "openai" in error_str:
+        return "OpenAI"
+    return None
+
+
+# ============================================================================
+# EXCEPTION HANDLER PROTOCOL (Strategy Pattern)
+# ============================================================================
+
+class _ExceptionHandler:
+    """Base class for exception handlers (Chain of Responsibility)"""
+
+    def can_handle(self, error_str: str) -> bool:
+        """Check if this handler can handle the exception"""
+        raise NotImplementedError
+
+    def handle(self, e: Exception, error_str: str) -> SuntoryError:
+        """Convert exception to SuntoryError"""
+        raise NotImplementedError
+
+
+class _APIKeyErrorHandler(_ExceptionHandler):
+    """Handles API authentication errors"""
+
+    KEYWORDS = ["api key", "authentication", "unauthorized", "401"]
+
+    def can_handle(self, error_str: str) -> bool:
+        return any(keyword in error_str for keyword in self.KEYWORDS)
+
+    def handle(self, e: Exception, error_str: str) -> SuntoryError:
+        provider = _extract_provider(error_str) or "OpenAI"
+        return APIKeyError(provider, e)
+
+
+class _RateLimitErrorHandler(_ExceptionHandler):
+    """Handles rate limit errors"""
+
+    KEYWORDS = ["rate limit", "quota", "429"]
+
+    def can_handle(self, error_str: str) -> bool:
+        return any(keyword in error_str for keyword in self.KEYWORDS)
+
+    def handle(self, e: Exception, error_str: str) -> SuntoryError:
+        provider = _extract_provider(error_str) or "the API"
+        return RateLimitError(provider)
+
+
+class _NetworkErrorHandler(_ExceptionHandler):
+    """Handles network connection errors"""
+
+    KEYWORDS = ["connection", "timeout", "network", "503", "502"]
+
+    def can_handle(self, error_str: str) -> bool:
+        return any(keyword in error_str for keyword in self.KEYWORDS)
+
+    def handle(self, e: Exception, error_str: str) -> SuntoryError:
+        return NetworkError(e)
+
+
+class _ModelErrorHandler(_ExceptionHandler):
+    """Handles model not found errors"""
+
+    KEYWORDS = ["model not found", "invalid model", "404"]
+
+    def can_handle(self, error_str: str) -> bool:
+        return any(keyword in error_str for keyword in self.KEYWORDS)
+
+    def handle(self, e: Exception, error_str: str) -> SuntoryError:
+        return ModelNotFoundError("unknown")
+
+
+class _FallbackHandler(_ExceptionHandler):
+    """Fallback handler for unknown errors"""
+
+    def can_handle(self, error_str: str) -> bool:
+        return True  # Always matches
+
+    def handle(self, e: Exception, error_str: str) -> SuntoryError:
+        return SuntoryError(
+            message=f"An unexpected error occurred: {str(e)}",
+            category=ErrorCategory.UNKNOWN,
+            severity=ErrorSeverity.MEDIUM,
+            recovery_suggestions=[
+                "Try your request again",
+                "Rephrase your question differently",
+                "Check the logs for more details",
+                "Contact support if the issue persists"
+            ],
+            original_error=e
+        )
+
+
+# Chain of handlers (order matters - first match wins)
+_HANDLERS: List[_ExceptionHandler] = [
+    _APIKeyErrorHandler(),
+    _RateLimitErrorHandler(),
+    _NetworkErrorHandler(),
+    _ModelErrorHandler(),
+    _FallbackHandler(),
+]
+
+
+# ============================================================================
+# PUBLIC API
+# ============================================================================
+
 def handle_exception(e: Exception) -> SuntoryError:
     """
     Convert generic exceptions to SuntoryError with helpful context.
+
+    Uses Chain of Responsibility pattern to delegate to specialized handlers.
 
     Args:
         e: Exception to handle
@@ -236,52 +362,22 @@ def handle_exception(e: Exception) -> SuntoryError:
     """
     logger.error(f"Handling exception: {type(e).__name__}: {str(e)}")
 
-    # Already a SuntoryError
+    # Already a SuntoryError - pass through
     if isinstance(e, SuntoryError):
         return e
 
-    # Map common exceptions to SuntoryErrors
+    # Convert to lowercase once for all handlers
     error_str = str(e).lower()
 
-    # API Key errors
-    if any(keyword in error_str for keyword in ["api key", "authentication", "unauthorized", "401"]):
-        provider = "OpenAI"  # Default
-        if "anthropic" in error_str:
-            provider = "Anthropic"
-        elif "google" in error_str or "gemini" in error_str:
-            provider = "Google"
-        return APIKeyError(provider, e)
+    # Chain of Responsibility: first handler that matches processes it
+    for handler in _HANDLERS:
+        if handler.can_handle(error_str):
+            return handler.handle(e, error_str)
 
-    # Rate limit errors
-    if any(keyword in error_str for keyword in ["rate limit", "quota", "429"]):
-        provider = "the API"
-        if "openai" in error_str:
-            provider = "OpenAI"
-        elif "anthropic" in error_str:
-            provider = "Anthropic"
-        elif "google" in error_str:
-            provider = "Google"
-        return RateLimitError(provider)
-
-    # Network errors
-    if any(keyword in error_str for keyword in ["connection", "timeout", "network", "503", "502"]):
-        return NetworkError(e)
-
-    # Model errors
-    if any(keyword in error_str for keyword in ["model not found", "invalid model", "404"]):
-        return ModelNotFoundError("unknown")
-
-    # Generic error
+    # Should never reach here due to FallbackHandler, but safety fallback
     return SuntoryError(
-        message=f"An unexpected error occurred: {str(e)}",
+        message=str(e),
         category=ErrorCategory.UNKNOWN,
-        severity=ErrorSeverity.MEDIUM,
-        recovery_suggestions=[
-            "Try your request again",
-            "Rephrase your question differently",
-            "Check the logs for more details",
-            "Contact support if the issue persists"
-        ],
         original_error=e
     )
 
