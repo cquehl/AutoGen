@@ -76,6 +76,7 @@ class ModelClientFactory:
 
     def _create_azure_client(self, model_name: str) -> AzureOpenAIChatCompletionClient:
         """Create Azure OpenAI client"""
+        from autogen_core.models import ModelInfo, ModelCapabilities
 
         # Strip 'azure/' prefix if present
         deployment_name = model_name.replace("azure/", "")
@@ -92,12 +93,23 @@ class ModelClientFactory:
             endpoint=self.settings.azure_openai_endpoint
         )
 
+        # Create ModelInfo to avoid "model_info is required" error
+        # This is needed because Azure deployment names are not standard OpenAI model names
+        model_info = ModelInfo(
+            vision=True,  # GPT-4o supports vision
+            function_calling=True,  # Supports function calling
+            json_output=True,  # Supports JSON mode
+            family="gpt-4o",  # Model family
+            structured_output=True  # Supports structured output (required field)
+        )
+
         return AzureOpenAIChatCompletionClient(
             model=deployment_name,
             api_version="2024-02-15-preview",
             azure_endpoint=self.settings.azure_openai_endpoint,
             api_key=self.settings.azure_openai_api_key,
-            azure_deployment=deployment_name
+            azure_deployment=deployment_name,
+            model_info=model_info  # Explicitly provide model_info
         )
 
     def _create_openai_client(self, model_name: str) -> OpenAIChatCompletionClient:
