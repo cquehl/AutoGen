@@ -457,6 +457,23 @@ class UserPreferencesManager:
         """Get current preferences (copy to prevent external modification)"""
         return self.preferences.copy()
 
+    def save(self):
+        """
+        Public method to save preferences to storage.
+
+        This replaces direct access to _storage.save() from external code.
+        """
+        self._storage.save(self.preferences, self.session_id)
+
+    def clear(self):
+        """
+        Public method to clear all preferences.
+
+        This replaces direct access to _delete_existing() and clear() from external code.
+        """
+        self.preferences.clear()
+        self._storage._delete_existing(self.preferences)
+
     def get_confirmation_message(self, updated_prefs: Dict[str, str]) -> Optional[str]:
         """
         Generate a confirmation message for updated preferences.

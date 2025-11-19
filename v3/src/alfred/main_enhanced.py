@@ -20,6 +20,7 @@ from ..core import (
     stream_completion,
     SuntoryError,
 )
+from .command_handler import CommandHandler
 from .modes import AlfredMode, get_direct_mode, get_team_mode
 from .personality import get_alfred_personality
 from .preference_errors import PreferenceStorageError
@@ -54,6 +55,9 @@ class AlfredEnhanced:
 
         # User preferences manager
         self.preferences_manager = UserPreferencesManager(self.session_id)
+
+        # Command handler (extracted for separation of concerns)
+        self.command_handler = CommandHandler(self)
 
         logger.info(
             "Alfred Enhanced initialized",
@@ -304,7 +308,7 @@ class AlfredEnhanced:
 
     async def _handle_command(self, command: str) -> str:
         """
-        Handle special commands.
+        Handle special commands (delegated to CommandHandler).
 
         Args:
             command: Command string (starts with /)
@@ -314,43 +318,8 @@ class AlfredEnhanced:
         """
         logger.info(f"Handling command: {command}")
 
-        parts = command.split(maxsplit=1)
-        cmd = parts[0].lower()
-        args = parts[1] if len(parts) > 1 else ""
-
         try:
-            if cmd == "/model":
-                return await self._cmd_switch_model(args)
-            elif cmd == "/agent":
-                return self._cmd_agent(args)
-            elif cmd == "/team":
-                if args:
-                    # Trigger streaming with team mode
-                    response_parts = []
-                    async for token in self.process_message_streaming(args, force_mode=AlfredMode.TEAM):
-                        response_parts.append(token)
-                    return "".join(response_parts)
-                else:
-                    return "Please provide a task description. Example: /team Build a data pipeline"
-            elif cmd == "/mode":
-                return self._cmd_show_mode()
-            elif cmd == "/cost":
-                return self._cmd_show_cost()
-            elif cmd == "/budget":
-                return await self._cmd_set_budget(args)
-            elif cmd == "/history":
-                return await self._cmd_show_history()
-            elif cmd == "/preferences":
-                return await self._cmd_preferences(args)
-            elif cmd == "/privacy":
-                return get_privacy_notice()
-            elif cmd == "/help":
-                return self._cmd_help()
-            elif cmd == "/clear":
-                return await self._cmd_clear_history()
-            else:
-                return f"Unknown command: {cmd}. Type /help for available commands."
-
+            return await self.command_handler.handle(command)
         except Exception as e:
             error = handle_exception(e)
             log_error(error)
