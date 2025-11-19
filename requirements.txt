@@ -1,9 +1,9 @@
 aioconsole==0.8.1
 annotated-types==0.7.0
 anyio==4.9.0
-autogen-agentchat==0.6.4
-autogen-core==0.6.4
-autogen-ext==0.6.4
+autogen-agentchat>=0.7.0
+autogen-core>=0.7.0
+autogen-ext>=0.7.0
 azure-core==1.35.0
 beautifulsoup4==4.12.3
 certifi==2025.7.14

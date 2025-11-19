@@ -254,18 +254,3 @@ class AgentRegistry:
 
     def __repr__(self) -> str:
         return f"AgentRegistry(agents={len(self._agents)})"
-
-
-# Global registry instance (for decorator usage)
-_global_registry: Optional[AgentRegistry] = None
-
-
-def get_global_registry() -> Optional[AgentRegistry]:
-    """Get global registry (if set)"""
-    return _global_registry
-
-
-def set_global_registry(registry: AgentRegistry):
-    """Set global registry"""
-    global _global_registry
-    _global_registry = registry

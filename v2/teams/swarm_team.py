@@ -58,6 +58,8 @@ class SwarmTeam(BaseTeam):
             max_rounds: Maximum conversation rounds
             timeout: Maximum execution time in seconds
         """
+        if max_rounds <= 0:
+            raise ValueError("max_rounds must be greater than 0")
         super().__init__(name, agents, max_rounds, timeout)
         self.selector_func = selector_func or self._default_selector
         self.allow_repeat = allow_repeat
@@ -184,9 +186,11 @@ class SwarmTeam(BaseTeam):
                 used_agents.add(selected_name)
 
                 # Execute agent
+                # Divide timeout among rounds (safe due to validation in __init__)
+                round_timeout = self.timeout // self.max_rounds
                 agent_result = await asyncio.wait_for(
                     self._execute_agent(selected_agent, current_task, messages),
-                    timeout=self.timeout // self.max_rounds,
+                    timeout=round_timeout,
                 )
 
                 # Add agent response to messages

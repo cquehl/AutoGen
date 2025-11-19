@@ -4,7 +4,7 @@ Conversation history management for agents.
 
 import json
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 

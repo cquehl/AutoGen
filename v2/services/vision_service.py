@@ -47,22 +47,25 @@ class VisionService:
     def _get_model_client(self):
         """Get or create vision model client (lazy initialization)"""
         if self._model_client is None:
-            # Get model client based on vision_provider
-            if self.config.vision_provider == "claude":
-                # Use Azure/OpenAI client with vision model
-                self._model_client = self.llm_settings.get_model_client()
-            elif self.config.vision_provider == "gpt4v":
-                from ..config.models import ModelProvider
-                self._model_client = self.llm_settings.get_model_client(
-                    provider=ModelProvider.OPENAI
-                )
-            elif self.config.vision_provider == "gemini":
-                from ..config.models import ModelProvider
-                self._model_client = self.llm_settings.get_model_client(
-                    provider=ModelProvider.GOOGLE
-                )
-            else:
-                raise ValueError(f"Unknown vision provider: {self.config.vision_provider}")
+            try:
+                # Get model client based on vision_provider
+                if self.config.vision_provider == "claude":
+                    # Use Azure/OpenAI client with vision model
+                    self._model_client = self.llm_settings.get_model_client()
+                elif self.config.vision_provider == "gpt4v":
+                    from ..config.models import ModelProvider
+                    self._model_client = self.llm_settings.get_model_client(
+                        provider=ModelProvider.OPENAI
+                    )
+                elif self.config.vision_provider == "gemini":
+                    from ..config.models import ModelProvider
+                    self._model_client = self.llm_settings.get_model_client(
+                        provider=ModelProvider.GOOGLE
+                    )
+                else:
+                    raise ValueError(f"Unknown vision provider: {self.config.vision_provider}")
+            except Exception as e:
+                raise RuntimeError(f"Failed to initialize vision model client: {str(e)}") from e
 
         return self._model_client
 

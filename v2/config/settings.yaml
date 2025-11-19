@@ -66,14 +66,15 @@ agents:
     temperature: 0.3
     max_tokens: 4096
     tools:
-      - database.query
-      - database.list_tables
-      - database.describe_table
-      - file.read
-      - file.read_csv
-      - file.write
-      - file.write_csv
-      - file.list_directory
+      - database.query          # ✓ SQL query execution with validation
+      - file.read              # ✓ Read file contents
+      # Future tools (not yet implemented):
+      # - database.list_tables
+      # - database.describe_table
+      # - file.read_csv
+      # - file.write
+      # - file.write_csv
+      # - file.list_directory
     reflect_on_tool_use: true
 
   web_surfer:
@@ -81,10 +82,11 @@ agents:
     model_provider: azure
     temperature: 0.7
     max_tokens: 4096
-    tools:
-      - web.search
-      - web.fetch
-      - web.scrape
+    tools: []
+      # Future tools (not yet implemented):
+      # - web.search
+      # - web.fetch
+      # - web.scrape
     reflect_on_tool_use: true
 
   orchestrator:

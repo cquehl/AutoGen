@@ -6,7 +6,7 @@ to execute commands without tight coupling to BashTool.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 from dataclasses import dataclass
 
 

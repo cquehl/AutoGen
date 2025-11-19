@@ -56,12 +56,11 @@ class SequentialTeam(BaseTeam):
             max_rounds: Number of times to loop through the sequence
             timeout: Maximum execution time in seconds
         """
+        if not agents:
+            raise ValueError("Sequential team requires at least one agent")
         super().__init__(name, agents, max_rounds, timeout)
         self.carryover_mode = carryover_mode
         self.max_carryover_messages = max_carryover_messages
-
-        if not agents:
-            raise ValueError("Sequential team requires at least one agent")
 
     async def run(self, task: str, **kwargs) -> TeamResult:
         """
@@ -96,9 +95,11 @@ class SequentialTeam(BaseTeam):
                     logger.info(f"Executing agent {idx + 1}/{len(self.agents)}: {agent_name}")
 
                     # Execute agent with timeout
+                    # Divide timeout among agents (safe due to validation in __init__)
+                    agent_timeout = self.timeout // len(self.agents)
                     agent_result = await asyncio.wait_for(
                         self._execute_agent(agent, current_task, all_messages),
-                        timeout=self.timeout // len(self.agents),  # Divide timeout among agents
+                        timeout=agent_timeout,
                     )
 
                     # Store message

@@ -8,16 +8,10 @@ Interactive command-line interface for chatting with agents.
 import asyncio
 import sys
 import signal
-from typing import Optional
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.markdown import Markdown
 from rich.table import Table
-from rich import print as rprint
-
-from autogen_agentchat.messages import TextMessage
-from autogen_agentchat.ui import Console as AutogenConsole
 
 from .core import get_container
 from .core.base_tool import ToolResult
