@@ -43,7 +43,7 @@ class ConversationHistory(Base):
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
     role = Column(String(50), nullable=False)  # user, assistant, system
     content = Column(Text, nullable=False)
-    metadata = Column(Text, nullable=True)  # JSON metadata
+    extra_data = Column(Text, nullable=True)  # JSON metadata (renamed from 'metadata' which is reserved)
 
 
 class AgentAction(Base):
@@ -68,7 +68,7 @@ class SessionMetadata(Base):
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     ended_at = Column(DateTime, nullable=True)
     user_name = Column(String(100), nullable=True)
-    metadata = Column(Text, nullable=True)  # JSON metadata
+    extra_data = Column(Text, nullable=True)  # JSON metadata (renamed from 'metadata' which is reserved)
 
 
 # =============================================================================
@@ -116,7 +116,7 @@ class DatabaseManager:
                 correlation_id=correlation_id,
                 role=role,
                 content=content,
-                metadata=json.dumps(metadata) if metadata else None
+                extra_data=json.dumps(metadata) if metadata else None
             )
             session.add(entry)
             await session.commit()

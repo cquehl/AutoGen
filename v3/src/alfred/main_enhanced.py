@@ -106,6 +106,27 @@ class AlfredEnhanced:
             # Fallback to simple greeting
             return "Good day. Alfred at your service. How may I assist you?"
 
+    async def handle_message(
+        self,
+        user_message: str,
+        force_mode: Optional[AlfredMode] = None
+    ) -> str:
+        """
+        Non-streaming convenience method for message processing.
+        Useful for testing, API usage, and programmatic interactions.
+
+        Args:
+            user_message: User's input
+            force_mode: Force specific mode (optional)
+
+        Returns:
+            Complete response as string
+        """
+        response = ""
+        async for token in self.process_message_streaming(user_message, force_mode):
+            response += token
+        return response
+
     async def process_message_streaming(
         self,
         user_message: str,
