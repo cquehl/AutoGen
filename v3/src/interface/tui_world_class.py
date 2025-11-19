@@ -349,7 +349,7 @@ class WorldClassTUI:
             pass
 
         self.console.print()
-        self.console.print("[success]✓ Alfred: Until next time, Me'Lord.[/success]")
+        self.console.print("[success]✓ Alfred: Until next time, sir.[/success]")
 
     async def initialize_alfred(self):
         """Initialize Alfred"""

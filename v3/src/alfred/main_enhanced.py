@@ -165,12 +165,12 @@ class AlfredEnhanced:
             # Add to history
             await self._add_to_history("user", user_message)
 
-            # Update user preferences from message
-            prefs_updated = self.preferences_manager.update_from_message(user_message)
-            if prefs_updated:
-                # Acknowledge preference update
+            # Update user preferences from message (async version with LLM extraction)
+            updated_prefs = await self.preferences_manager.update_from_message_async(user_message)
+            if updated_prefs:
+                # Acknowledge preference update (only show what changed)
                 confirmation = self.preferences_manager.get_confirmation_message(
-                    self.preferences_manager.get_preferences()
+                    updated_prefs
                 )
                 if confirmation:
                     yield confirmation + "\n\n"
@@ -334,6 +334,8 @@ class AlfredEnhanced:
                 return await self._cmd_set_budget(args)
             elif cmd == "/history":
                 return await self._cmd_show_history()
+            elif cmd == "/preferences":
+                return await self._cmd_preferences(args)
             elif cmd == "/help":
                 return self._cmd_help()
             elif cmd == "/clear":
@@ -490,6 +492,107 @@ class AlfredEnhanced:
         self.conversation_history.clear()
         return "✓ Conversation history cleared. Starting fresh."
 
+    async def _cmd_preferences(self, args: str) -> str:
+        """
+        Manage user preferences.
+
+        Subcommands:
+          /preferences view - Show current preferences
+          /preferences set <key>=<value> - Manually set a preference
+          /preferences reset - Clear all preferences
+        """
+        if not args:
+            args = "view"  # Default to view
+
+        parts = args.split(maxsplit=1)
+        subcmd = parts[0].lower()
+
+        if subcmd == "view":
+            prefs = self.preferences_manager.get_preferences()
+            if not prefs:
+                return "**No preferences set yet.**\n\nTell me how you'd like to be addressed!"
+
+            result = "**Your Preferences:**\n\n"
+            pref_labels = {
+                "gender": "Address as",
+                "name": "Name",
+                "formality": "Formality",
+                "title": "Title",
+                "timezone": "Timezone",
+                "communication_style": "Style"
+            }
+
+            for key, value in prefs.items():
+                label = pref_labels.get(key, key.title())
+                # Format gender as sir/madam
+                if key == "gender":
+                    display_value = "sir" if value == "male" else "madam" if value == "female" else value
+                else:
+                    display_value = value
+                result += f"  • **{label}:** {display_value}\n"
+
+            result += "\n**Commands:**\n"
+            result += "  • `/preferences set <key>=<value>` - Update a preference\n"
+            result += "  • `/preferences reset` - Clear all preferences\n"
+
+            return result
+
+        elif subcmd == "set":
+            if len(parts) < 2:
+                return (
+                    "**Usage:** `/preferences set <key>=<value>`\n\n"
+                    "**Examples:**\n"
+                    "  • `/preferences set gender=male`\n"
+                    "  • `/preferences set name=Charles`\n"
+                    "  • `/preferences set formality=formal`\n\n"
+                    "**Valid keys:**\n"
+                    "  • `gender` (male/female/non-binary)\n"
+                    "  • `name` (any name)\n"
+                    "  • `formality` (casual/formal/very_formal)\n"
+                    "  • `title` (Mr./Dr./Professor/etc.)\n"
+                    "  • `communication_style` (concise/detailed/balanced)"
+                )
+
+            # Parse key=value
+            try:
+                key_value = parts[1]
+                if "=" not in key_value:
+                    return "Invalid format. Use: `/preferences set key=value`"
+
+                key, value = key_value.split("=", 1)
+                key = key.strip()
+                value = value.strip()
+
+                # Validate key
+                valid_keys = ["gender", "name", "formality", "title", "timezone", "communication_style"]
+                if key not in valid_keys:
+                    return f"Invalid key '{key}'. Valid keys: {', '.join(valid_keys)}"
+
+                # Update preference
+                old_value = self.preferences_manager.preferences.get(key)
+                self.preferences_manager.preferences[key] = value
+                self.preferences_manager._save_to_storage()
+
+                if old_value:
+                    return f"✓ Updated **{key}** from '{old_value}' to '{value}'"
+                else:
+                    return f"✓ Set **{key}** to '{value}'"
+
+            except Exception as e:
+                return f"Error setting preference: {e}"
+
+        elif subcmd == "reset":
+            self.preferences_manager.preferences.clear()
+            # Delete from storage
+            try:
+                self.preferences_manager._delete_existing_preferences()
+                return "✓ All preferences cleared. Tell me how you'd like to be addressed!"
+            except Exception as e:
+                return f"✓ Preferences cleared from memory (storage cleanup failed: {e})"
+
+        else:
+            return f"Unknown subcommand '{subcmd}'. Use: view, set, or reset"
+
     def _cmd_help(self) -> str:
         """Show help message"""
         return """**◆ ALFRED COMMAND REFERENCE**
@@ -508,6 +611,11 @@ class AlfredEnhanced:
   `/budget` - Display current budget limits
   `/budget <daily|monthly> <amount>` - Set spending limits
 
+**👤 Preferences:**
+  `/preferences` - View your current preferences
+  `/preferences set <key>=<value>` - Set a preference manually
+  `/preferences reset` - Clear all preferences
+
 **⚙️ Mode & History:**
   `/mode` - Show current operating mode (Direct/Team)
   `/history` - View recent conversation history
@@ -523,12 +631,14 @@ class AlfredEnhanced:
   • **Smart Routing:** Complex tasks auto-trigger team mode
   • **Double Ctrl-C:** Press Ctrl-C twice to exit gracefully
   • **Budget Safety:** Set limits to prevent surprise API bills
+  • **Preferences:** Tell me how you want to be addressed naturally, or use `/preferences`
 
 **📚 Examples:**
   `/model gpt-4o` - Switch to GPT-4 Omni
   `/agent engineer` - View Software Engineer agent details
   `/team Build a REST API with authentication` - Activate team mode
   `/budget daily 5.00` - Set $5 daily spending limit
+  `/preferences set name=Master Charles` - Set your preferred name
 
 **Need more help?** Just ask Alfred naturally - "What can you do?" or "How does team mode work?"
 """
