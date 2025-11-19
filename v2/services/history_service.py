@@ -186,12 +186,19 @@ class HistoryService:
                         data = json.load(f)
 
                     for msg in data.get("messages", []):
+                        # Safely parse timestamp with fallback to current time
+                        timestamp_str = msg.get("timestamp")
+                        try:
+                            timestamp = datetime.fromisoformat(timestamp_str) if timestamp_str else datetime.now()
+                        except (ValueError, TypeError):
+                            timestamp = datetime.now()
+
                         conversations.append({
                             "type": "conversation",
                             "role": msg.get("role"),
                             "content": msg.get("content"),
                             "name": msg.get("name"),
-                            "timestamp": datetime.fromisoformat(msg.get("timestamp")),
+                            "timestamp": timestamp,
                             "conversation_id": data.get("conversation_id"),
                         })
                 except Exception as e:

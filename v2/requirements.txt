@@ -37,6 +37,5 @@ pytest>=8.3.0
 pytest-asyncio>=0.24.0
 pytest-benchmark>=5.1.0
 
-# Optional: Web Tools (for future QA team)
-playwright>=1.50.0      # Browser automation
-beautifulsoup4>=4.12.0  # HTML parsing
+# Note: Optional dependencies moved to requirements-optional.txt
+# (playwright, beautifulsoup4 - for future web tools)

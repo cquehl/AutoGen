@@ -178,7 +178,9 @@ class DatabaseService:
         result = await self.execute_query(query, connection_string=connection_string)
 
         if result.get("success"):
-            tables = [list(row.values())[0] for row in result["results"]]
+            # Safely handle None results
+            results = result.get("results") or []
+            tables = [list(row.values())[0] for row in results]
             return {"success": True, "tables": tables, "count": len(tables)}
         else:
             return result
