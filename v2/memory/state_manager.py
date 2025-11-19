@@ -4,7 +4,7 @@ State management for agents and workflows.
 
 import json
 from typing import Dict, Any, Optional, Set
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from enum import Enum

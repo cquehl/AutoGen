@@ -1,5 +1,26 @@
 # AutoGen V2 - Implementation Guide for Critical Gaps
 
+> **⚠️ IMPORTANT: THIS IS A DESIGN DOCUMENT FOR FUTURE FEATURES**
+>
+> This document describes **PLANNED FEATURES that are NOT YET IMPLEMENTED** in the codebase.
+> For documentation of currently implemented features, see `/v2/README-V2.md`.
+>
+> **Currently Implemented Tools:**
+> - ✅ `weather.forecast` - Weather forecasts from weather.gov
+> - ✅ `database.query` - SQL query execution with validation
+> - ✅ `file.read` - File reading operations
+> - ✅ `alfred.list_capabilities` - System capability discovery
+> - ✅ `alfred.show_history` - Conversation history
+> - ✅ `alfred.delegate_to_team` - Multi-agent delegation
+>
+> **Planned But Not Implemented (described in this document):**
+> - ❌ Shell/Bash tools
+> - ❌ Git/GitHub tools
+> - ❌ Web search/fetch tools
+> - ❌ File write tools
+> - ❌ Database schema tools
+> - ❌ Multimodal tools
+
 **Following the Yamazaki v2 Architecture Patterns**
 
 This document provides detailed implementation blueprints for adding the 5 critical capabilities while strictly adhering to AutoGen V2's existing architecture patterns.

@@ -5,10 +5,8 @@ Demonstrates the Yamazaki v2 architecture with example usage.
 """
 
 import asyncio
-from pathlib import Path
 
 from .core import get_container
-from .observability import get_logger
 
 
 async def demo_weather_agent():

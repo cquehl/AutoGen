@@ -590,7 +590,6 @@ class AppSettings(BaseSettings):
             ChatCompletionClient instance
         """
         from autogen_core.models import ChatCompletionClient
-        from autogen_ext.models.openai import OpenAIChatCompletionClient
 
         llm_config = self.get_llm_config(provider)
 

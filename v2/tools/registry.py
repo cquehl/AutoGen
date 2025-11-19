@@ -246,32 +246,22 @@ class ToolRegistry:
             List of recommended tool names
         """
         # Define tool mappings for common agent types
+        # Only includes currently implemented tools
         AGENT_TOOL_MAPPINGS = {
             "data_analyst": [
-                "database.query",
-                "database.list_tables",
-                "database.describe_table",
-                "file.read",
-                "file.read_csv",
-                "file.write",
-                "file.write_csv",
-                "file.list_directory",
+                "database.query",    # ✓ SQL query execution
+                "file.read",        # ✓ File reading
             ],
             "web_surfer": [
-                "web.search",
-                "web.fetch",
-                "web.scrape",
-                "web.screenshot",
+                # No web tools implemented yet
             ],
             "weather": [
-                "weather.forecast",
+                "weather.forecast",  # ✓ Weather forecasts from weather.gov
             ],
-            "qa_tester": [
-                "web.navigate",
-                "web.screenshot",
-                "web.fill_form",
-                "web.click",
-                "web.assert_text",
+            "alfred": [
+                "alfred.list_capabilities",  # ✓ System capability discovery
+                "alfred.show_history",       # ✓ Conversation history
+                "alfred.delegate_to_team",   # ✓ Multi-agent delegation
             ],
         }
 
@@ -314,28 +304,17 @@ class ToolRegistry:
         """
         # Import tool modules to trigger registration
         try:
-            from .database import query_tool, schema_tool
-            from .file import read_tool, write_tool
+            from .database import query_tool
+            from .file import read_tool
             from .weather import forecast_tool
-            from .web import fetch_tool, screenshot_tool
+            from .alfred import (
+                list_capabilities_tool,
+                show_history_tool,
+                delegate_to_team_tool
+            )
         except ImportError as e:
-            # Some tools may not exist yet
+            # Some tools may not exist yet - log but don't fail
             pass
 
     def __repr__(self) -> str:
         return f"ToolRegistry(tools={len(self._tools)})"
-
-
-# Global registry instance (for decorator usage)
-_global_registry: Optional[ToolRegistry] = None
-
-
-def get_global_registry() -> Optional[ToolRegistry]:
-    """Get global registry (if set)"""
-    return _global_registry
-
-
-def set_global_registry(registry: ToolRegistry):
-    """Set global registry"""
-    global _global_registry
-    _global_registry = registry

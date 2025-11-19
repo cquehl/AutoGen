@@ -1,8 +1,15 @@
 # AutoGen V2 - Product Roadmap
 
+> **⚠️ IMPORTANT: THESE ARE PLANNED FEATURES, NOT CURRENT CAPABILITIES**
+>
+> All features listed below with "DESIGNED" status are **NOT YET IMPLEMENTED**.
+> This is a planning document for future development, not a description of current functionality.
+>
+> **For current features and capabilities, see `/v2/README-V2.md`**
+
 **Document Version:** 2.0
 **Date:** 2025-11-15
-**Status:** Ready for Implementation
+**Status:** Planning Document - Features Not Implemented
 
 ---
 
@@ -10,7 +17,7 @@
 
 This document outlines the product roadmap for AutoGen V2, focusing on achieving functional parity with Claude Code while maintaining our superior multi-agent architecture. Each feature has been fully designed following the Yamazaki v2 architecture patterns.
 
-**📘 Implementation Guide:** See [`IMPLEMENTATION_GUIDE.md`](./IMPLEMENTATION_GUIDE.md) for complete implementation details, code examples, and architecture patterns.
+**📘 Implementation Guide:** See [`IMPLEMENTATION_GUIDE.md`](./IMPLEMENTATION_GUIDE.md) for complete implementation details, code examples, and architecture patterns. **Note: This guide describes planned features, not current implementation.**
 
 ---
 
