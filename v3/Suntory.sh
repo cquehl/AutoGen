@@ -178,7 +178,7 @@ echo ""
 
 # Launch Alfred
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
-python -m src.interface.tui
+python -m src.interface
 
 # Cleanup message
 echo ""

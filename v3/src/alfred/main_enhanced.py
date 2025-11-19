@@ -271,6 +271,8 @@ class AlfredEnhanced:
         try:
             if cmd == "/model":
                 return await self._cmd_switch_model(args)
+            elif cmd == "/agent":
+                return self._cmd_agent(args)
             elif cmd == "/team":
                 if args:
                     # Trigger streaming with team mode
@@ -325,6 +327,49 @@ class AlfredEnhanced:
         except Exception as e:
             error = handle_exception(e)
             return error.format_for_user()
+
+    def _cmd_agent(self, args: str) -> str:
+        """Show available agents or agent details"""
+        # Import agent definitions from autocomplete
+        from ..interface.autocomplete import SuntoryCompleter
+
+        if not args:
+            # List all agents
+            result = "**Available Agents:**\n\n"
+            result += "**Specialist Agents:**\n"
+            for agent in ["engineer", "qa", "product", "ux", "data", "security", "ops"]:
+                desc = SuntoryCompleter.AGENTS[agent]
+                result += f"  • `{agent}` - {desc}\n"
+
+            result += "\n**Magentic-One Agents:**\n"
+            for agent in ["web_surfer", "file_surfer", "coder", "terminal"]:
+                desc = SuntoryCompleter.AGENTS[agent]
+                result += f"  • `{agent}` - {desc}\n"
+
+            result += "\n**Usage:**\n"
+            result += "  • `/agent <name>` - Get details about specific agent\n"
+            result += "  • Type `/agent ` and press Tab for autocomplete\n"
+            result += "  • Use `/team <task>` to activate team orchestration mode\n"
+
+            return result
+        else:
+            # Show specific agent details
+            agent_name = args.strip().lower()
+            if agent_name in SuntoryCompleter.AGENTS:
+                desc = SuntoryCompleter.AGENTS[agent_name]
+
+                # Add category
+                category = "Magentic-One" if agent_name in ["web_surfer", "file_surfer", "coder", "terminal"] else "Specialist"
+
+                return (
+                    f"**Agent: {agent_name}**\n"
+                    f"**Category:** {category}\n\n"
+                    f"{desc}\n\n"
+                    f"✓ Available for team mode orchestration\n"
+                    f"✓ Use `/team <your task>` to activate"
+                )
+            else:
+                return f"Unknown agent: `{agent_name}`\n\nUse `/agent` to see all available agents."
 
     def _cmd_show_mode(self) -> str:
         """Show current mode"""
@@ -403,33 +448,45 @@ class AlfredEnhanced:
 
     def _cmd_help(self) -> str:
         """Show help message"""
-        return """**Alfred Commands:**
+        return """**◆ ALFRED COMMAND REFERENCE**
 
-**Model Management:**
-  `/model` - Show current model and available options
-  `/model <name>` - Switch to a different model
+**🤖 Agent Management:**
+  `/agent` - List all available agents (11 specialists)
+  `/agent <name>` - Get details about a specific agent
+  `/team <task>` - Force team orchestration mode for complex tasks
 
-**Cost Management:**
-  `/cost` - Show cost summary and breakdown
-  `/budget` - Show current budget limits
-  `/budget <daily|monthly> <amount>` - Set budget limit
+**🧠 Model Management:**
+  `/model` - Show current model and available providers
+  `/model <name>` - Switch to a different LLM model
 
-**Mode Control:**
-  `/mode` - Show current operating mode
-  `/team <task>` - Force team orchestration mode
+**💰 Cost Management:**
+  `/cost` - Show detailed cost summary and breakdown
+  `/budget` - Display current budget limits
+  `/budget <daily|monthly> <amount>` - Set spending limits
 
-**History:**
-  `/history` - Show recent conversation history
-  `/clear` - Clear conversation history
+**⚙️ Mode & History:**
+  `/mode` - Show current operating mode (Direct/Team)
+  `/history` - View recent conversation history
+  `/clear` - Clear conversation history and start fresh
 
-**Help:**
-  `/help` - Show this help message
+**❓ Help:**
+  `/help` - Show this command reference
 
-**Tips:**
-- Alfred streams responses in real-time
-- Costs are displayed after each request
-- Budget limits prevent overspending
-- Complex tasks automatically trigger team mode
+**💡 Pro Tips:**
+  • **Autocomplete:** Press Tab while typing commands to see suggestions
+  • **Streaming:** Responses stream in real-time for faster feedback
+  • **Cost Tracking:** See API costs after each request automatically
+  • **Smart Routing:** Complex tasks auto-trigger team mode
+  • **Double Ctrl-C:** Press Ctrl-C twice to exit gracefully
+  • **Budget Safety:** Set limits to prevent surprise API bills
+
+**📚 Examples:**
+  `/model gpt-4o` - Switch to GPT-4 Omni
+  `/agent engineer` - View Software Engineer agent details
+  `/team Build a REST API with authentication` - Activate team mode
+  `/budget daily 5.00` - Set $5 daily spending limit
+
+**Need more help?** Just ask Alfred naturally - "What can you do?" or "How does team mode work?"
 """
 
     async def _add_to_history(self, role: str, content: str):
