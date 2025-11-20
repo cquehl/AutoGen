@@ -177,8 +177,8 @@ class DockerExecutor:
                 # Kill container on timeout or error
                 try:
                     container.kill()
-                except:
-                    pass
+                except Exception as kill_err:
+                    logger.debug(f"Failed to kill container: {kill_err}")
 
                 if "timeout" in str(e).lower():
                     raise ResourceError("execution time", f"{timeout}s")
@@ -192,15 +192,16 @@ class DockerExecutor:
                 # Clean up container
                 try:
                     container.remove(force=True)
-                except:
-                    pass
+                    logger.debug(f"Container removed: {container.id[:12]}")
+                except Exception as rm_err:
+                    logger.warning(f"Failed to remove container: {rm_err}")
 
         finally:
             # Clean up code file
             try:
                 code_file.unlink()
-            except:
-                pass
+            except Exception as del_err:
+                logger.warning(f"Failed to delete temp file {code_file}: {del_err}")
 
     async def execute_bash(
         self,
@@ -257,8 +258,8 @@ class DockerExecutor:
             except Exception as e:
                 try:
                     container.kill()
-                except:
-                    pass
+                except Exception as kill_err:
+                    logger.debug(f"Failed to kill container: {kill_err}")
 
                 if "timeout" in str(e).lower():
                     raise ResourceError("execution time", f"{timeout}s")
@@ -271,8 +272,9 @@ class DockerExecutor:
             finally:
                 try:
                     container.remove(force=True)
-                except:
-                    pass
+                    logger.debug(f"Container removed: {container.id[:12]}")
+                except Exception as rm_err:
+                    logger.warning(f"Failed to remove container: {rm_err}")
 
         except Exception as e:
             logger.error(f"Bash execution failed: {e}")
@@ -283,15 +285,22 @@ class DockerExecutor:
         return self.client is not None
 
 
-# Singleton instance
+# Singleton instance with thread safety
+import threading
 _docker_executor: Optional[DockerExecutor] = None
+_executor_lock = threading.Lock()
 
 
 def get_docker_executor() -> DockerExecutor:
-    """Get or create Docker executor singleton"""
+    """Get or create Docker executor singleton (thread-safe)"""
     global _docker_executor
-    if _docker_executor is None:
-        _docker_executor = DockerExecutor()
+    if _docker_executor is not None:
+        return _docker_executor
+
+    with _executor_lock:
+        # Double-check locking pattern
+        if _docker_executor is None:
+            _docker_executor = DockerExecutor()
     return _docker_executor
 
 

@@ -92,7 +92,8 @@ class SuntoryTUIEnhanced:
                     self.console.print(
                         "[yellow]⚠ Docker not available - code execution disabled[/yellow]"
                     )
-            except:
+            except Exception as e:
+                logger.debug(f"Docker check failed: {e}")
                 self.console.print(
                     "[yellow]⚠ Docker not available - code execution disabled[/yellow]"
                 )
@@ -148,7 +149,8 @@ class SuntoryTUIEnhanced:
             from ..core import get_docker_executor
             executor = get_docker_executor()
             docker_status = "✓ Enabled" if executor.is_available() else "✗ Disabled"
-        except:
+        except Exception as e:
+            logger.debug(f"Docker check failed: {e}")
             docker_status = "✗ Disabled"
 
         table.add_row("Docker Sandbox:", docker_status)
@@ -201,8 +203,8 @@ class SuntoryTUIEnhanced:
                                 )
                             )
                             self.console.print()
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Cost summary display failed: {e}")
 
                     self.console.print(
                         "[green]Alfred: Very good. Until next time.[/green]"
@@ -270,8 +272,9 @@ class SuntoryTUIEnhanced:
                                 padding=(1, 2)
                             )
                             live.update(panel)
-                        except:
-                            # Fallback to text
+                        except Exception as e:
+                            # Fallback to text if markdown rendering fails
+                            logger.debug(f"Markdown rendering failed: {e}")
                             panel = Panel(
                                 current_response,
                                 title="[bold]Alfred[/bold]",

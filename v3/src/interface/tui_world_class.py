@@ -135,7 +135,8 @@ class WorldClassTUI:
                         "[cost.warning]⚠ Docker offline - code execution disabled[/cost.warning]"
                     )
                 time.sleep(0.2)
-            except:
+            except Exception as e:
+                logger.debug(f"Docker check failed: {e}")
                 self.console.print(
                     "[cost.warning]⚠ Docker offline - code execution disabled[/cost.warning]"
                 )
@@ -190,7 +191,8 @@ class WorldClassTUI:
             from ..core import get_docker_executor
             executor = get_docker_executor()
             status = "[success]ONLINE[/success]" if executor.is_available() else "[error]OFFLINE[/error]"
-        except:
+        except Exception as e:
+            logger.debug(f"Docker check failed: {e}")
             status = "[error]OFFLINE[/error]"
 
         table.add_row("Docker Sandbox:", status)
@@ -294,7 +296,9 @@ class WorldClassTUI:
                                 padding=(1, 2)
                             )
                             live.update(panel)
-                        except:
+                        except Exception as e:
+                            # Fallback if markdown rendering fails
+                            logger.debug(f"Markdown rendering failed: {e}")
                             panel = Panel(
                                 f"[alfred]{current_response}[/alfred]",
                                 title="[panel.title]◆ ALFRED[/panel.title]",
@@ -345,8 +349,8 @@ class WorldClassTUI:
                             padding=(1, 2)
                         )
                     )
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Cost summary display failed: {e}")
 
         self.console.print()
         self.console.print("[success]✓ Alfred: Until next time, sir.[/success]")
