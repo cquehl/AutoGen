@@ -73,39 +73,17 @@ class SuntorySettings(BaseSettings):
         description="Running environment"
     )
 
-    log_level: str = Field(
-        default="INFO",
-        description="Logging level"
-    )
-
-    database_url: str = Field(
-        default="sqlite:///./v3/data/suntory.db",
-        description="Database connection URL"
-    )
-
-    chroma_db_path: str = Field(
-        default="./v3/data/chroma",
-        description="ChromaDB storage path"
-    )
-
-    workspace_dir: str = Field(
-        default="./v3/workspace",
-        description="Workspace directory for agent operations"
-    )
+    log_level: str = Field(default="INFO", description="Logging level")
+    database_url: str = Field(default="sqlite:///./v3/data/suntory.db", description="Database connection URL")
+    chroma_db_path: str = Field(default="./v3/data/chroma", description="ChromaDB storage path")
+    workspace_dir: str = Field(default="./v3/workspace", description="Workspace directory for agent operations")
 
     # =================================================================
     # Docker Configuration
     # =================================================================
 
-    docker_enabled: bool = Field(
-        default=True,
-        description="Enable Docker sandboxing"
-    )
-
-    docker_timeout: int = Field(
-        default=300,
-        description="Docker operation timeout in seconds"
-    )
+    docker_enabled: bool = Field(default=True, description="Enable Docker sandboxing")
+    docker_timeout: int = Field(default=300, description="Docker operation timeout in seconds")
 
     # =================================================================
     # Security Configuration
@@ -115,30 +93,15 @@ class SuntorySettings(BaseSettings):
         default_factory=lambda: ["./v3/workspace", "./v3/data", "./v3/logs"],
         description="Allowed directories for file operations"
     )
-
-    operation_timeout: int = Field(
-        default=60,
-        description="Maximum time for operations in seconds"
-    )
+    operation_timeout: int = Field(default=60, description="Maximum time for operations in seconds")
 
     # =================================================================
     # Observability Configuration
     # =================================================================
 
-    enable_telemetry: bool = Field(
-        default=True,
-        description="Enable telemetry and tracing"
-    )
-
-    metrics_port: int = Field(
-        default=9090,
-        description="Metrics export port"
-    )
-
-    service_name: str = Field(
-        default="suntory-v3",
-        description="Service name for tracing"
-    )
+    enable_telemetry: bool = Field(default=True, description="Enable telemetry and tracing")
+    metrics_port: int = Field(default=9090, description="Metrics export port")
+    service_name: str = Field(default="suntory-v3", description="Service name for tracing")
 
     # =================================================================
     # Alfred Configuration
@@ -158,45 +121,35 @@ class SuntorySettings(BaseSettings):
     # Agent Configuration
     # =================================================================
 
-    max_team_turns: int = Field(
-        default=30,
-        description="Maximum turns for team conversations"
-    )
-
-    agent_timeout: int = Field(
-        default=120,
-        description="Agent response timeout in seconds"
-    )
-
-    enable_agent_memory: bool = Field(
-        default=True,
-        description="Enable persistent agent memory"
-    )
+    max_team_turns: int = Field(default=30, description="Maximum turns for team conversations")
+    agent_timeout: int = Field(default=120, description="Agent response timeout in seconds")
+    enable_agent_memory: bool = Field(default=True, description="Enable persistent agent memory")
 
     # =================================================================
     # User Preference Privacy Settings
     # =================================================================
 
     enable_llm_preference_extraction: bool = Field(
-        default=True,
-        description="Enable LLM-based preference extraction (sends data to LLM provider)"
+        default=True, description="Enable LLM-based preference extraction (sends data to LLM provider)"
     )
-
     preference_retention_days: int = Field(
-        default=365,
-        description="Number of days to retain user preferences (0 = forever)"
+        default=365, description="Number of days to retain user preferences (0 = forever)"
     )
 
     # =================================================================
     # Validators
     # =================================================================
 
+    @staticmethod
+    def _ensure_directory_exists(path: str) -> None:
+        """Helper to ensure directory exists"""
+        Path(path).mkdir(parents=True, exist_ok=True)
+
     @field_validator("workspace_dir", "chroma_db_path")
     @classmethod
     def create_directories(cls, v: str) -> str:
         """Ensure directories exist"""
-        path = Path(v)
-        path.mkdir(parents=True, exist_ok=True)
+        cls._ensure_directory_exists(v)
         return v
 
     @field_validator("allowed_directories")
@@ -204,7 +157,7 @@ class SuntorySettings(BaseSettings):
     def validate_directories(cls, v: List[str]) -> List[str]:
         """Create allowed directories"""
         for dir_path in v:
-            Path(dir_path).mkdir(parents=True, exist_ok=True)
+            cls._ensure_directory_exists(dir_path)
         return v
 
     # =================================================================
@@ -222,16 +175,13 @@ class SuntorySettings(BaseSettings):
 
     def get_available_providers(self) -> List[str]:
         """Get list of available LLM providers"""
-        providers = []
-        if self.openai_api_key:
-            providers.append("openai")
-        if self.anthropic_api_key:
-            providers.append("anthropic")
-        if self.google_api_key:
-            providers.append("google")
-        if self.azure_openai_api_key:
-            providers.append("azure")
-        return providers
+        provider_map = {
+            "openai": self.openai_api_key,
+            "anthropic": self.anthropic_api_key,
+            "google": self.google_api_key,
+            "azure": self.azure_openai_api_key,
+        }
+        return [name for name, key in provider_map.items() if key]
 
     def get_workspace_path(self) -> Path:
         """Get workspace path as Path object"""
