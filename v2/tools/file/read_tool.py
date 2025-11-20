@@ -20,14 +20,14 @@ class FileReadTool(BaseTool):
     VERSION = "1.0.0"
     REQUIRES_SECURITY_VALIDATION = True
 
-    def __init__(self, security_middleware):
+    def __init__(self, security_middleware=None, **kwargs):
         """
         Initialize file read tool.
 
         Args:
             security_middleware: Security middleware
         """
-        super().__init__()
+        super().__init__(**kwargs)
         self.security = security_middleware
 
     async def execute(

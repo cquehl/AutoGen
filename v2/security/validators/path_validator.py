@@ -85,8 +85,14 @@ class PathValidator:
                         None
                     )
 
-            # Now safe to resolve the full path
-            path = path.resolve()
+            # For write operations on non-existing files, resolve parent directory
+            if operation == "write" and not path.exists():
+                # Resolve parent directory and append filename
+                parent = path.parent.resolve()
+                path = parent / path.name
+            else:
+                # Now safe to resolve the full path
+                path = path.resolve()
 
             # Check if path is within allowed directories
             allowed = False

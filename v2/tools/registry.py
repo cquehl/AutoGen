@@ -246,9 +246,12 @@ class ToolRegistry:
             "data_analyst": [
                 "database.query",    # ✓ SQL query execution
                 "file.read",        # ✓ File reading
+                "file.write",       # ✓ File writing
+                "file.append",      # ✓ File appending
             ],
             "web_surfer": [
-                # No web tools implemented yet
+                "web.search",       # ✓ Web search
+                "web.news",         # ✓ News search
             ],
             "weather": [
                 "weather.forecast",  # ✓ Weather forecasts from weather.gov
@@ -257,6 +260,11 @@ class ToolRegistry:
                 "alfred.list_capabilities",  # ✓ System capability discovery
                 "alfred.show_history",       # ✓ Conversation history
                 "alfred.delegate_to_team",   # ✓ Multi-agent delegation
+                "web.search",               # ✓ Web search for research
+                "web.news",                 # ✓ News retrieval
+                "file.read",                # ✓ File reading
+                "file.write",               # ✓ File writing
+                "file.append",              # ✓ File appending
             ],
         }
 
@@ -300,8 +308,9 @@ class ToolRegistry:
         # Import tool modules to trigger registration
         try:
             from .database import query_tool
-            from .file import read_tool
+            from .file import read_tool, write_tool, append_tool
             from .weather import forecast_tool
+            from .web import search_tool, news_tool
             from .alfred import (
                 list_capabilities_tool,
                 show_history_tool,

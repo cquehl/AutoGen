@@ -87,12 +87,66 @@ class Container:
             # Auto-discover and register tools
             registry.discover_tools()
 
+            # Register all tools
+            self._register_all_tools(registry)
+
             # Register Alfred's tools (requires services, so done after registry creation)
             self._register_alfred_tools(registry)
 
             self._singletons["tool_registry"] = registry
 
         return self._singletons["tool_registry"]
+
+    def _register_all_tools(self, registry):
+        """
+        Register all standard tools.
+
+        Args:
+            registry: ToolRegistry to register tools in
+        """
+        from ..tools.database import DatabaseQueryTool
+        from ..tools.file import FileReadTool, WriteFileTool, AppendFileTool
+        from ..tools.weather import WeatherForecastTool
+        from ..tools.web import WebSearchTool, NewsSearchTool
+
+        # Database tools
+        registry.register(
+            name=DatabaseQueryTool.NAME,
+            tool_class=DatabaseQueryTool,
+        )
+
+        # File tools
+        registry.register(
+            name=FileReadTool.NAME,
+            tool_class=FileReadTool,
+        )
+
+        registry.register(
+            name=WriteFileTool.NAME,
+            tool_class=WriteFileTool,
+        )
+
+        registry.register(
+            name=AppendFileTool.NAME,
+            tool_class=AppendFileTool,
+        )
+
+        # Weather tools
+        registry.register(
+            name=WeatherForecastTool.NAME,
+            tool_class=WeatherForecastTool,
+        )
+
+        # Web tools
+        registry.register(
+            name=WebSearchTool.NAME,
+            tool_class=WebSearchTool,
+        )
+
+        registry.register(
+            name=NewsSearchTool.NAME,
+            tool_class=NewsSearchTool,
+        )
 
     def _register_alfred_tools(self, registry):
         """
