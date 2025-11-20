@@ -339,7 +339,8 @@ def run_onboarding(console: Console, force: bool = False) -> bool:
                 try:
                     with open(marker_file, 'w') as f:
                         f.write("completed")
-                except:
+                except (OSError, IOError) as e:
+                    # Ignore file errors - tutorial completion marker is non-critical
                     pass
 
             return not tutorial.skipped

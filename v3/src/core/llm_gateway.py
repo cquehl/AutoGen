@@ -121,6 +121,7 @@ class LLMGateway:
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
+        timeout: int = 120,
         **kwargs
     ) -> Any:
         """
@@ -132,6 +133,7 @@ class LLMGateway:
             temperature: Sampling temperature
             max_tokens: Maximum tokens to generate
             tools: Function calling tools
+            timeout: Request timeout in seconds (default 120s)
             **kwargs: Additional arguments for LiteLLM
 
         Returns:
@@ -144,7 +146,8 @@ class LLMGateway:
                 "Requesting completion",
                 model=model_to_use,
                 message_count=len(messages),
-                temperature=temperature
+                temperature=temperature,
+                timeout=timeout
             )
 
             response = completion(
@@ -153,6 +156,7 @@ class LLMGateway:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 tools=tools,
+                timeout=timeout,
                 **kwargs
             )
 
@@ -189,6 +193,7 @@ class LLMGateway:
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
+        timeout: int = 120,
         **kwargs
     ) -> Any:
         """
@@ -200,6 +205,7 @@ class LLMGateway:
             temperature: Sampling temperature
             max_tokens: Maximum tokens to generate
             tools: Function calling tools
+            timeout: Request timeout in seconds (default 120s)
             **kwargs: Additional arguments for LiteLLM
 
         Returns:
@@ -212,7 +218,8 @@ class LLMGateway:
                 "Requesting async completion",
                 model=model_to_use,
                 message_count=len(messages),
-                temperature=temperature
+                temperature=temperature,
+                timeout=timeout
             )
 
             response = await acompletion(
@@ -221,6 +228,7 @@ class LLMGateway:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 tools=tools,
+                timeout=timeout,
                 **kwargs
             )
 

@@ -111,15 +111,20 @@ class DatabaseManager:
     ):
         """Add conversation entry"""
         async with self.async_session_maker() as session:
-            entry = ConversationHistory(
-                session_id=session_id,
-                correlation_id=correlation_id,
-                role=role,
-                content=content,
-                extra_data=json.dumps(metadata) if metadata else None
-            )
-            session.add(entry)
-            await session.commit()
+            try:
+                entry = ConversationHistory(
+                    session_id=session_id,
+                    correlation_id=correlation_id,
+                    role=role,
+                    content=content,
+                    extra_data=json.dumps(metadata) if metadata else None
+                )
+                session.add(entry)
+                await session.commit()
+            except Exception as e:
+                await session.rollback()
+                logger.error(f"Failed to add conversation entry: {e}", exc_info=True)
+                raise
 
     async def add_agent_action(
         self,
@@ -132,16 +137,21 @@ class DatabaseManager:
     ):
         """Add agent action log"""
         async with self.async_session_maker() as session:
-            action = AgentAction(
-                session_id=session_id,
-                correlation_id=correlation_id,
-                agent_name=agent_name,
-                action_type=action_type,
-                action_data=json.dumps(action_data),
-                result=json.dumps(result) if result else None
-            )
-            session.add(action)
-            await session.commit()
+            try:
+                action = AgentAction(
+                    session_id=session_id,
+                    correlation_id=correlation_id,
+                    agent_name=agent_name,
+                    action_type=action_type,
+                    action_data=json.dumps(action_data),
+                    result=json.dumps(result) if result else None
+                )
+                session.add(action)
+                await session.commit()
+            except Exception as e:
+                await session.rollback()
+                logger.error(f"Failed to add agent action: {e}", exc_info=True)
+                raise
 
     async def get_conversation_history(
         self,
