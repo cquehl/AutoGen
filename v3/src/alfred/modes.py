@@ -13,6 +13,7 @@ from autogen_core.models import ChatCompletionClient
 
 from ..core import get_llm_gateway, get_logger, set_correlation_id
 from ..core.model_factory import create_model_client
+from .agent_factory import AgentFactory
 
 logger = get_logger(__name__)
 
@@ -143,60 +144,7 @@ class TeamOrchestratorMode:
 
     def __init__(self):
         self.llm_gateway = get_llm_gateway()
-
-    def create_specialist_agent(
-        self,
-        name: str,
-        role: str,
-        expertise: str,
-        model: Optional[str] = None
-    ) -> AssistantAgent:
-        """
-        Create a specialist agent.
-
-        Args:
-            name: Agent name
-            role: Agent role/title
-            expertise: Area of expertise
-            model: LLM model to use (model name string)
-
-        Returns:
-            Configured AssistantAgent
-        """
-        system_message = f"""You are {name}, a {role} specialist.
-
-**Your Expertise:** {expertise}
-
-**Your Role in the Team:**
-- Provide expert guidance in your domain
-- Collaborate with other specialists
-- Deliver high-quality, actionable outputs
-- Ask clarifying questions when needed
-- Flag issues or concerns in your area
-
-**Communication Style:**
-- Clear and professional
-- Domain-specific but accessible
-- Collaborative and team-oriented
-
-Focus on your area of expertise and coordinate with team members."""
-
-        # Create proper AutoGen ModelClient instead of passing string
-        # If model is provided, use it; otherwise use default from settings
-        model_client = create_model_client(model)
-
-        logger.debug(
-            f"Creating agent {name}",
-            model_client_type=type(model_client).__name__
-        )
-
-        agent = AssistantAgent(
-            name=name,
-            model_client=model_client,
-            system_message=system_message,
-        )
-
-        return agent
+        self.factory = AgentFactory()  # Extracted for separation of concerns
 
     async def assemble_team(
         self,
@@ -215,40 +163,6 @@ Focus on your area of expertise and coordinate with team members."""
         """
         logger.info(f"Assembling team for: {task_type}")
 
-        agents = []
-
-        # Define specialist roles
-        specialists = {
-            "engineer": {
-                "role": "Senior Software Engineer",
-                "expertise": "Software architecture, coding best practices, system design, debugging"
-            },
-            "qa": {
-                "role": "QA Engineer",
-                "expertise": "Test strategy, quality assurance, bug detection, test automation"
-            },
-            "product": {
-                "role": "Product Manager",
-                "expertise": "Requirements gathering, user stories, product vision, prioritization"
-            },
-            "ux": {
-                "role": "UX Designer",
-                "expertise": "User experience, interface design, usability, accessibility"
-            },
-            "data": {
-                "role": "Data Scientist",
-                "expertise": "Data analysis, ETL pipelines, statistical modeling, data visualization"
-            },
-            "security": {
-                "role": "Security Auditor",
-                "expertise": "Security vulnerabilities, threat modeling, secure coding, compliance"
-            },
-            "ops": {
-                "role": "Operations Engineer",
-                "expertise": "Infrastructure, deployment, monitoring, scalability, DevOps"
-            }
-        }
-
         # Determine which specialists to include
         if custom_agents:
             agent_roles = custom_agents
@@ -256,16 +170,8 @@ Focus on your area of expertise and coordinate with team members."""
             # Auto-select based on task type
             agent_roles = self._determine_agents_for_task(task_type)
 
-        # Create agents
-        for role_key in agent_roles:
-            if role_key in specialists:
-                spec = specialists[role_key]
-                agent = self.create_specialist_agent(
-                    name=role_key.upper(),
-                    role=spec["role"],
-                    expertise=spec["expertise"]
-                )
-                agents.append(agent)
+        # Delegate agent creation to factory
+        agents = self.factory.create_team(agent_roles)
 
         logger.info(
             f"Team assembled with {len(agents)} specialists",
