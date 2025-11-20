@@ -367,7 +367,12 @@ Focus on your area of expertise and coordinate with team members."""
                     "or contact support if this persists."
                 )
             else:
-                return f"I apologize, but the team encountered an error: {error_msg}"
+                # Generic error message - don't expose implementation details
+                return (
+                    "I apologize, but the team encountered an unexpected error. "
+                    f"Error ID: {correlation_id[:8] if correlation_id else 'unknown'}. "
+                    "This has been logged. Please try a simpler request or contact support."
+                )
 
         except Exception as e:
             import traceback
@@ -375,12 +380,15 @@ Focus on your area of expertise and coordinate with team members."""
                 f"Team orchestration failed: {str(e)}\nTraceback:\n{traceback.format_exc()}",
                 correlation_id=correlation_id
             )
+            # FIX: Don't expose error details to user - security issue
             return (
-                f"I apologize, but the team encountered an error: {str(e)}\n\n"
+                "I apologize, but the team encountered an unexpected error. "
+                f"Error ID: {correlation_id[:8] if correlation_id else 'unknown'}. "
                 "This has been logged. You may want to try:\n"
                 "• Using a simpler request\n"
                 "• Switching models with `/model <name>`\n"
-                "• Asking me directly without team mode"
+                "• Asking me directly without team mode\n\n"
+                "Please contact support with the error ID if this persists."
             )
 
     def _extract_team_output(self, result: Any) -> str:
@@ -404,18 +412,33 @@ Focus on your area of expertise and coordinate with team members."""
 _direct_mode: Optional[DirectProxyMode] = None
 _team_mode: Optional[TeamOrchestratorMode] = None
 
+# Thread safety locks for singletons
+import threading
+_direct_mode_lock = threading.Lock()
+_team_mode_lock = threading.Lock()
+
 
 def get_direct_mode() -> DirectProxyMode:
-    """Get or create direct mode singleton"""
+    """Get or create direct mode singleton (thread-safe)"""
     global _direct_mode
-    if _direct_mode is None:
-        _direct_mode = DirectProxyMode()
+    if _direct_mode is not None:
+        return _direct_mode
+
+    with _direct_mode_lock:
+        # Double-check locking pattern
+        if _direct_mode is None:
+            _direct_mode = DirectProxyMode()
     return _direct_mode
 
 
 def get_team_mode() -> TeamOrchestratorMode:
-    """Get or create team mode singleton"""
+    """Get or create team mode singleton (thread-safe)"""
     global _team_mode
-    if _team_mode is None:
-        _team_mode = TeamOrchestratorMode()
+    if _team_mode is not None:
+        return _team_mode
+
+    with _team_mode_lock:
+        # Double-check locking pattern
+        if _team_mode is None:
+            _team_mode = TeamOrchestratorMode()
     return _team_mode

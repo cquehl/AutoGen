@@ -332,15 +332,22 @@ class LLMGateway:
         raise last_error
 
 
-# Singleton instance
+# Singleton instance with thread safety
+import threading
 _gateway: Optional[LLMGateway] = None
+_gateway_lock = threading.Lock()
 
 
 def get_llm_gateway() -> LLMGateway:
-    """Get or create LLM gateway singleton"""
+    """Get or create LLM gateway singleton (thread-safe)"""
     global _gateway
-    if _gateway is None:
-        _gateway = LLMGateway()
+    if _gateway is not None:
+        return _gateway
+
+    with _gateway_lock:
+        # Double-check locking pattern
+        if _gateway is None:
+            _gateway = LLMGateway()
     return _gateway
 
 

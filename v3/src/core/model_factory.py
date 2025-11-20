@@ -145,15 +145,22 @@ class ModelClientFactory:
         logger.info("Model client cache cleared")
 
 
-# Singleton instance
+# Singleton instance with thread safety
+import threading
 _factory: Optional[ModelClientFactory] = None
+_factory_lock = threading.Lock()
 
 
 def get_model_client_factory() -> ModelClientFactory:
-    """Get or create ModelClientFactory singleton"""
+    """Get or create ModelClientFactory singleton (thread-safe)"""
     global _factory
-    if _factory is None:
-        _factory = ModelClientFactory()
+    if _factory is not None:
+        return _factory
+
+    with _factory_lock:
+        # Double-check locking pattern
+        if _factory is None:
+            _factory = ModelClientFactory()
     return _factory
 
 

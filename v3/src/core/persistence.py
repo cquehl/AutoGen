@@ -170,7 +170,7 @@ class DatabaseManager:
                     "role": entry.role,
                     "content": entry.content,
                     "timestamp": entry.timestamp.isoformat(),
-                    "metadata": json.loads(entry.metadata) if entry.metadata else None
+                    "metadata": json.loads(entry.extra_data) if entry.extra_data else None
                 }
                 for entry in reversed(entries)  # Return in chronological order
             ]

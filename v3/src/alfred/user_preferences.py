@@ -159,18 +159,6 @@ class UserPreferencesManager:
         Returns:
             Dictionary of ONLY updated preferences (not all preferences)
         """
-        # THREAD SAFETY: Acquire lock to prevent concurrent updates
-        # Using threading lock in async context with asyncio.to_thread
-        import asyncio
-
-        def _do_update():
-            with self._update_lock:
-                return self._update_from_message_sync(user_message)
-
-        return await asyncio.to_thread(_do_update)
-
-    def _update_from_message_sync(self, user_message: str) -> Dict[str, str]:
-        """Synchronous version of update logic for thread safety."""
         # OPTIMIZATION: Quick heuristic check before expensive LLM call
         # Only extract preferences if user explicitly says "memorize"
         from .preference_patterns import might_contain_preferences
@@ -188,28 +176,17 @@ class UserPreferencesManager:
             # Use LLM-based structured extraction
             try:
                 extractor = get_preference_extractor()
-                # FIX: Use asyncio.run() instead of creating new event loop
-                # This prevents event loop conflicts and race conditions
-                import asyncio
-                try:
-                    # Try to get the current event loop
-                    loop = asyncio.get_running_loop()
-                    # If we're already in an async context, we can't use asyncio.run()
-                    # This should not happen in sync context, but guard against it
-                    logger.error("Cannot run async extraction from within async context")
-                    updated_prefs = self._update_with_regex(user_message)
-                except RuntimeError:
-                    # No event loop running - safe to use asyncio.run()
-                    extracted = asyncio.run(extractor.extract_preferences(user_message, use_llm=True))
+                # FIX: Properly await async method - no event loop creation needed
+                extracted = await extractor.extract_preferences(user_message, use_llm=True)
 
-                    # Update any extracted preferences
-                    for field, value in extracted.to_dict().items():
-                        if value is not None:
-                            old_value = self.preferences.get(field)
-                            if old_value != value:
-                                self.preferences[field] = value
-                                updated_prefs[field] = value
-                                logger.info(f"Updated {field} preference to: {value}")
+                # Update any extracted preferences
+                for field, value in extracted.to_dict().items():
+                    if value is not None:
+                        old_value = self.preferences.get(field)
+                        if old_value != value:
+                            self.preferences[field] = value
+                            updated_prefs[field] = value
+                            logger.info(f"Updated {field} preference to: {value}")
 
             except Exception as e:
                 logger.warning(f"LLM extraction failed, falling back to regex: {e}", exc_info=True)

@@ -576,15 +576,21 @@ class AlfredEnhanced:
                 if key not in valid_keys:
                     return f"Invalid key '{key}'. Valid keys: {', '.join(valid_keys)}"
 
-                # Update preference
+                # FIX: Sanitize value before storing - security issue
+                from ..alfred.input_sanitization import sanitize_preference_value
+                sanitized_value = sanitize_preference_value(value, max_length=100)
+                if not sanitized_value:
+                    return f"Invalid value for '{key}'. Please check your input and avoid special characters."
+
+                # Update preference with sanitized value
                 old_value = self.preferences_manager.preferences.get(key)
-                self.preferences_manager.preferences[key] = value
+                self.preferences_manager.preferences[key] = sanitized_value
                 self.preferences_manager._save_to_storage()
 
                 if old_value:
-                    return f"✓ Updated **{key}** from '{old_value}' to '{value}'"
+                    return f"✓ Updated **{key}** from '{old_value}' to '{sanitized_value}'"
                 else:
-                    return f"✓ Set **{key}** to '{value}'"
+                    return f"✓ Set **{key}** to '{sanitized_value}'"
 
             except Exception as e:
                 return f"Error setting preference: {e}"
