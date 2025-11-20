@@ -12,87 +12,41 @@ from ..core import get_logger, get_llm_gateway, get_settings
 logger = get_logger(__name__)
 
 
-class AlfredPersonality:
-    """
-    Alfred's personality engine.
+# =================================================================
+# Greeting Templates
+# =================================================================
 
-    Generates context-aware greetings and maintains butler-like character.
-    """
+FORMAL_GREETINGS = {
+    "morning": [
+        "Good morning, sir. I trust you slept well?",
+        "Good morning. Alfred at your service.",
+        "A pleasant morning to you. Shall we begin?"
+    ],
+    "afternoon": [
+        "Good afternoon, sir. How may I be of assistance?",
+        "Good afternoon. I hope the day finds you well.",
+        "Good afternoon. What shall we accomplish today?"
+    ],
+    "evening": [
+        "Good evening, sir. I trust the day has been productive?",
+        "Good evening. Shall we build something remarkable tonight?",
+        "Good evening. What challenges shall we tackle this evening?"
+    ],
+    "night": [
+        "Working late, I see. How may I assist you this evening?",
+        "Good evening, sir. Burning the midnight oil, are we?",
+        "Late evening greetings. What requires our attention tonight?"
+    ]
+}
 
-    def __init__(self):
-        self.settings = get_settings()
-        self.llm_gateway = get_llm_gateway()
+CASUAL_GREETINGS = [
+    "Hey there! Alfred here. What can I help you with?",
+    "Hello! Ready to get some work done?",
+    "Hi! What's on the agenda today?",
+    "Welcome back! What are we working on?",
+]
 
-    def get_time_of_day(self) -> str:
-        """Get time of day greeting"""
-        hour = datetime.now().hour
-
-        if 5 <= hour < 12:
-            return "morning"
-        elif 12 <= hour < 17:
-            return "afternoon"
-        elif 17 <= hour < 21:
-            return "evening"
-        else:
-            return "night"
-
-    def get_formal_greeting(self) -> str:
-        """Get formal butler greeting"""
-        time_of_day = self.get_time_of_day()
-
-        greetings = {
-            "morning": [
-                "Good morning, sir. I trust you slept well?",
-                "Good morning. Alfred at your service.",
-                "A pleasant morning to you. Shall we begin?"
-            ],
-            "afternoon": [
-                "Good afternoon, sir. How may I be of assistance?",
-                "Good afternoon. I hope the day finds you well.",
-                "Good afternoon. What shall we accomplish today?"
-            ],
-            "evening": [
-                "Good evening, sir. I trust the day has been productive?",
-                "Good evening. Shall we build something remarkable tonight?",
-                "Good evening. What challenges shall we tackle this evening?"
-            ],
-            "night": [
-                "Working late, I see. How may I assist you this evening?",
-                "Good evening, sir. Burning the midnight oil, are we?",
-                "Late evening greetings. What requires our attention tonight?"
-            ]
-        }
-
-        return random.choice(greetings[time_of_day])
-
-    def get_casual_greeting(self) -> str:
-        """Get casual greeting"""
-        greetings = [
-            "Hey there! Alfred here. What can I help you with?",
-            "Hello! Ready to get some work done?",
-            "Hi! What's on the agenda today?",
-            "Welcome back! What are we working on?",
-        ]
-        return random.choice(greetings)
-
-    async def generate_ai_greeting(self) -> str:
-        """
-        Generate AI-powered context-aware greeting.
-
-        Uses LLM to create unique, personalized greetings based on:
-        - Time of day
-        - Recent work (if available)
-        - Alfred's butler personality
-        """
-        time_of_day = self.get_time_of_day()
-        hour = datetime.now().hour
-        date = datetime.now().strftime("%A, %B %d")
-
-        try:
-            messages = [
-                {
-                    "role": "system",
-                    "content": """You are Alfred, a distinguished butler and AI concierge.
+AI_GREETING_SYSTEM_PROMPT = """You are Alfred, a distinguished butler and AI concierge.
 You greet your employer (address as 'sir' or 'Master Charles' occasionally) with:
 - Professional warmth and refined courtesy
 - Time-aware context (morning, afternoon, evening, night)
@@ -106,80 +60,8 @@ Examples:
 - "Working late, I see. I'm here to assist with whatever you require."
 
 Keep it short, elegant, and butler-appropriate."""
-                },
-                {
-                    "role": "user",
-                    "content": f"Generate a greeting for {time_of_day} ({hour}:00), {date}. Make it unique and contextual."
-                }
-            ]
 
-            response = await self.llm_gateway.acomplete(
-                messages=messages,
-                temperature=0.8,
-                max_tokens=100
-            )
-
-            greeting = response.choices[0].message.content.strip()
-            logger.info("Generated AI greeting", greeting=greeting)
-            return greeting
-
-        except Exception as e:
-            logger.warning(f"Failed to generate AI greeting: {e}")
-            return self.get_formal_greeting()
-
-    async def get_greeting(self) -> str:
-        """
-        Get appropriate greeting based on configuration.
-
-        Returns:
-            Greeting string
-        """
-        style = self.settings.alfred_greeting_style
-
-        if style.value == "formal":
-            return self.get_formal_greeting()
-        elif style.value == "casual":
-            return self.get_casual_greeting()
-        else:  # time_aware (default)
-            return await self.generate_ai_greeting()
-
-    def get_system_message(self, user_preferences: Optional[Dict[str, str]] = None) -> str:
-        """
-        Get Alfred's system message for LLM interactions.
-
-        Args:
-            user_preferences: Optional user preferences (gender, name, etc.)
-
-        Returns:
-            System message defining Alfred's personality and capabilities
-        """
-        personality = self.settings.alfred_personality
-
-        if personality.value == "professional":
-            personality_desc = "Always professional, courteous, and refined. No humor."
-        elif personality.value == "witty":
-            personality_desc = "Professional but with frequent dry wit and charm."
-        else:  # balanced
-            personality_desc = "Professional with occasional subtle wit (20% of the time)."
-
-        # Add user preference context
-        preference_context = ""
-        if user_preferences:
-            prefs = []
-            if "gender" in user_preferences:
-                gender = user_preferences["gender"]
-                if gender == "male":
-                    prefs.append("Address the user as 'sir' (not 'madam')")
-                elif gender == "female":
-                    prefs.append("Address the user as 'madam' (not 'sir')")
-
-            if "name" in user_preferences:
-                prefs.append(f"User's name is {user_preferences['name']}")
-
-            if prefs:
-                preference_context = "\n\n**IMPORTANT USER PREFERENCES:**\n" + "\n".join(f"- {p}" for p in prefs)
-
-        return f"""You are **Alfred**, the distinguished AI concierge and butler for the Suntory System.{preference_context}
+ALFRED_SYSTEM_MESSAGE_TEMPLATE = """You are **Alfred**, the distinguished AI concierge and butler for the Suntory System.{preference_context}
 
 **Your Personality:**
 {personality_desc}
@@ -239,14 +121,127 @@ Keep it short, elegant, and butler-appropriate."""
 Be distinguished. Be helpful. Be Alfred.
 """
 
+REFLECTION_PROMPTS = [
+    "What did I learn from this interaction?",
+    "How could I have served the user better?",
+    "What patterns am I noticing in their requests?",
+    "What should I remember for next time?"
+]
+
+
+class AlfredPersonality:
+    """
+    Alfred's personality engine.
+
+    Generates context-aware greetings and maintains butler-like character.
+    """
+
+    def __init__(self):
+        self.settings = get_settings()
+        self.llm_gateway = get_llm_gateway()
+
+    def get_time_of_day(self) -> str:
+        """Get time of day greeting"""
+        hour = datetime.now().hour
+
+        if 5 <= hour < 12:
+            return "morning"
+        elif 12 <= hour < 17:
+            return "afternoon"
+        elif 17 <= hour < 21:
+            return "evening"
+        else:
+            return "night"
+
+    def get_formal_greeting(self) -> str:
+        """Get formal butler greeting"""
+        return random.choice(FORMAL_GREETINGS[self.get_time_of_day()])
+
+    def get_casual_greeting(self) -> str:
+        """Get casual greeting"""
+        return random.choice(CASUAL_GREETINGS)
+
+    async def generate_ai_greeting(self) -> str:
+        """
+        Generate AI-powered context-aware greeting.
+
+        Uses LLM to create unique, personalized greetings based on:
+        - Time of day
+        - Recent work (if available)
+        - Alfred's butler personality
+        """
+        time_of_day = self.get_time_of_day()
+        hour = datetime.now().hour
+        date = datetime.now().strftime("%A, %B %d")
+
+        try:
+            messages = [
+                {"role": "system", "content": AI_GREETING_SYSTEM_PROMPT},
+                {"role": "user", "content": f"Generate a greeting for {time_of_day} ({hour}:00), {date}. Make it unique and contextual."}
+            ]
+
+            response = await self.llm_gateway.acomplete(
+                messages=messages,
+                temperature=0.8,
+                max_tokens=100
+            )
+
+            greeting = response.choices[0].message.content.strip()
+            logger.info("Generated AI greeting", greeting=greeting)
+            return greeting
+
+        except Exception as e:
+            logger.warning(f"Failed to generate AI greeting: {e}")
+            return self.get_formal_greeting()
+
+    async def get_greeting(self) -> str:
+        """Get appropriate greeting based on configuration"""
+        greeting_map = {
+            "formal": self.get_formal_greeting,
+            "casual": self.get_casual_greeting,
+            "time_aware": self.generate_ai_greeting,
+        }
+        handler = greeting_map.get(self.settings.alfred_greeting_style.value, self.generate_ai_greeting)
+        result = handler()
+        return await result if hasattr(result, '__await__') else result
+
+    def _build_preference_context(self, user_preferences: Optional[Dict[str, str]]) -> str:
+        """Build preference context string from user preferences"""
+        if not user_preferences:
+            return ""
+
+        prefs = []
+        if "gender" in user_preferences:
+            gender = user_preferences["gender"]
+            if gender == "male":
+                prefs.append("Address the user as 'sir' (not 'madam')")
+            elif gender == "female":
+                prefs.append("Address the user as 'madam' (not 'sir')")
+
+        if "name" in user_preferences:
+            prefs.append(f"User's name is {user_preferences['name']}")
+
+        return "\n\n**IMPORTANT USER PREFERENCES:**\n" + "\n".join(f"- {p}" for p in prefs) if prefs else ""
+
+    def _get_personality_description(self) -> str:
+        """Get personality description based on settings"""
+        personality_map = {
+            "professional": "Always professional, courteous, and refined. No humor.",
+            "witty": "Professional but with frequent dry wit and charm.",
+            "balanced": "Professional with occasional subtle wit (20% of the time).",
+        }
+        return personality_map.get(self.settings.alfred_personality.value, personality_map["balanced"])
+
+    def get_system_message(self, user_preferences: Optional[Dict[str, str]] = None) -> str:
+        """Get Alfred's system message for LLM interactions"""
+        return ALFRED_SYSTEM_MESSAGE_TEMPLATE.format(
+            preference_context=self._build_preference_context(user_preferences),
+            personality_desc=self._get_personality_description()
+        )
+
     def get_reflection_prompts(self) -> List[str]:
         """Get prompts for Alfred to reflect on conversations"""
-        return [
-            "What did I learn from this interaction?",
-            "How could I have served the user better?",
-            "What patterns am I noticing in their requests?",
-            "What should I remember for next time?"
-        ]
+        return REFLECTION_PROMPTS
 
 
 # Singleton instance
