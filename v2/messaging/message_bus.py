@@ -82,25 +82,16 @@ class MessageBus:
         """
         self.max_history = max_history
 
-        # Subscribers: EventType -> List[(subscription_id, callback)]
         self._subscribers: Dict[EventType, List[tuple]] = defaultdict(list)
-
-        # Wildcard subscribers (get all events)
         self._wildcard_subscribers: List[tuple] = []
 
         # Event history (deque for O(1) operations)
         self._event_history: deque = deque(maxlen=max_history)
 
-        # Message queues for agents: agent_name -> asyncio.Queue
         self._agent_queues: Dict[str, asyncio.Queue] = {}
-
-        # Middleware functions
         self._middleware: List[Callable] = []
-
-        # Active subscriptions for cleanup
         self._active_subscriptions: Set[str] = set()
 
-        # Locks for thread safety
         self._subscribers_lock = asyncio.Lock()
         self._history_lock = asyncio.Lock()
         self._queues_lock = asyncio.Lock()
@@ -163,14 +154,12 @@ class MessageBus:
         Args:
             subscription_id: ID returned from subscribe()
         """
-        # Remove from all subscriber lists
         for event_type in self._subscribers:
             self._subscribers[event_type] = [
                 (sid, cb) for sid, cb in self._subscribers[event_type]
                 if sid != subscription_id
             ]
 
-        # Remove from wildcard subscribers
         self._wildcard_subscribers = [
             (sid, cb) for sid, cb in self._wildcard_subscribers
             if sid != subscription_id
@@ -188,7 +177,6 @@ class MessageBus:
         Args:
             event: Event to publish
         """
-        # Generate event ID if not present
         if not event.event_id:
             event.event_id = str(uuid.uuid4())
 
@@ -198,7 +186,6 @@ class MessageBus:
 
         logger.debug(f"Publishing event: {event.event_type.value} [{event.event_id}]")
 
-        # Apply middleware
         processed_event = event
         for middleware in self._middleware:
             processed_event = await middleware(processed_event)
@@ -210,7 +197,6 @@ class MessageBus:
         type_subscribers = self._subscribers.get(event.event_type, []).copy()
         wildcard_subscribers = self._wildcard_subscribers.copy()
 
-        # Notify type-specific subscribers
         for subscription_id, callback in type_subscribers:
             try:
                 if asyncio.iscoroutinefunction(callback):
@@ -223,7 +209,6 @@ class MessageBus:
                     exc_info=True,
                 )
 
-        # Notify wildcard subscribers
         for subscription_id, callback in wildcard_subscribers:
             try:
                 if asyncio.iscoroutinefunction(callback):
@@ -244,17 +229,15 @@ class MessageBus:
             message: Message to send
         """
         if message.recipient:
-            # Direct message to specific agent
             queue = await self._get_or_create_queue(message.recipient)
             await queue.put(message)
             logger.debug(f"Message sent from {message.sender} to {message.recipient}")
         else:
-            # Broadcast to all agents
             async with self._queues_lock:
                 queues = list(self._agent_queues.items())
 
             for agent_name, queue in queues:
-                if agent_name != message.sender:  # Don't send to self
+                if agent_name != message.sender:
                     await queue.put(message)
             logger.debug(f"Message broadcast from {message.sender}")
 
@@ -314,14 +297,11 @@ class MessageBus:
         Returns:
             List of events
         """
-        # Get snapshot of history
         events = list(self._event_history)
 
-        # Filter by type
         if event_type:
             events = [e for e in events if e.event_type == event_type]
 
-        # Apply limit
         if limit:
             events = events[-limit:]
 
@@ -360,7 +340,6 @@ class MessageBus:
         """Shutdown message bus and cleanup resources."""
         logger.info("Shutting down message bus")
 
-        # Clear all queues
         async with self._queues_lock:
             for queue in self._agent_queues.values():
                 while not queue.empty():
@@ -371,7 +350,6 @@ class MessageBus:
 
             self._agent_queues.clear()
 
-        # Clear subscribers
         self._subscribers.clear()
         self._wildcard_subscribers.clear()
         self._active_subscriptions.clear()

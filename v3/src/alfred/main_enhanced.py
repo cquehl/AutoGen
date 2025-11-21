@@ -47,12 +47,10 @@ class AlfredEnhanced:
         self.team_mode = get_team_mode()
         self.cost_tracker = get_cost_tracker()
 
-        # Session management
         self.session_id = str(uuid.uuid4())
         self.conversation_history: List[dict] = []
         self.current_mode = AlfredMode.DIRECT
 
-        # User preferences manager
         self.preferences_manager = UserPreferencesManager(self.session_id)
 
         logger.info(
@@ -66,16 +64,10 @@ class AlfredEnhanced:
         logger.info("Initializing Alfred Enhanced and services...")
 
         try:
-            # Initialize database
             db = await get_db_manager()
-
-            # Initialize vector store
             vector = get_vector_manager()
-
-            # Load user preferences from previous sessions
             self.preferences_manager.load_from_storage()
 
-            # Log session start
             await db.add_conversation(
                 session_id=self.session_id,
                 role="system",
@@ -106,16 +98,12 @@ class AlfredEnhanced:
         """
         try:
             greeting = await self.personality.get_greeting()
-
-            # Log greeting
             await self._add_to_history("assistant", greeting)
-
             return greeting
 
         except Exception as e:
             error = handle_exception(e)
             log_error(error)
-            # Fallback to simple greeting
             return "Good day. Alfred at your service. How may I assist you?"
 
     async def handle_message(
@@ -163,10 +151,8 @@ class AlfredEnhanced:
         )
 
         try:
-            # Add to history
             await self._add_to_history("user", user_message)
 
-            # Update user preferences from message (async version with LLM extraction)
             try:
                 updated_prefs = await self.preferences_manager.update_from_message_async(user_message)
                 if updated_prefs:
@@ -181,13 +167,11 @@ class AlfredEnhanced:
                 logger.error(f"Preference storage error: {e}")
                 yield f"\n{e.format_for_user()}\n\n"
 
-            # Check for commands (non-streaming)
             if user_message.startswith("/"):
                 response = await self._handle_command(user_message)
                 yield response
                 return
 
-            # Determine mode
             if force_mode:
                 mode = force_mode
             elif self.direct_mode.should_use_team_mode(user_message):
@@ -197,13 +181,11 @@ class AlfredEnhanced:
 
             self.current_mode = mode
 
-            # Show mode selection
             if mode == AlfredMode.TEAM:
                 yield "\n🤝 **Team Mode Activated** - Assembling specialists...\n\n"
             else:
                 yield "\n💭 "
 
-            # Process based on mode
             full_response = ""
 
             if mode == AlfredMode.DIRECT:
@@ -216,10 +198,8 @@ class AlfredEnhanced:
                 full_response = response
                 yield response
 
-            # Add response to history
             await self._add_to_history("assistant", full_response)
 
-            # Show cost at end
             if self.cost_tracker.session_costs:
                 last_cost = self.cost_tracker.session_costs[-1]
                 yield f"\n\n{self.cost_tracker.format_cost_display(last_cost)}"
@@ -250,7 +230,6 @@ class AlfredEnhanced:
         Returns:
             Alfred's response
         """
-        # Collect streaming response
         response_parts = []
         async for token in self.process_message_streaming(user_message, force_mode):
             response_parts.append(token)
@@ -259,11 +238,9 @@ class AlfredEnhanced:
 
     async def _process_direct_streaming(self, message: str) -> AsyncIterator[str]:
         """Process message in direct mode with streaming"""
-        # Get user preferences and inject into system message
         user_prefs = self.preferences_manager.get_preferences()
         system_message = self.personality.get_system_message(user_prefs)
 
-        # Build message history
         messages = [{"role": "system", "content": system_message}]
 
         # Add context (last 10 messages)
@@ -274,21 +251,17 @@ class AlfredEnhanced:
                     "content": entry["content"]
                 })
 
-        # Add current message
         messages.append({"role": "user", "content": message})
 
-        # Stream response
         async for token in stream_completion(messages):
             yield token
 
     async def _process_team(self, message: str) -> str:
         """Process message in team orchestrator mode"""
-        # Add preamble about team assembly
         preamble = (
             "Certainly. I'm coordinating a team of specialists for this task.\n\n"
         )
 
-        # Process with team
         try:
             team_response = await self.team_mode.process(
                 task_description=message,
@@ -325,7 +298,6 @@ class AlfredEnhanced:
                 return self._cmd_agent(args)
             elif cmd == "/team":
                 if args:
-                    # Trigger streaming with team mode
                     response_parts = []
                     async for token in self.process_message_streaming(args, force_mode=AlfredMode.TEAM):
                         response_parts.append(token)
@@ -384,11 +356,9 @@ class AlfredEnhanced:
 
     def _cmd_agent(self, args: str) -> str:
         """Show available agents or agent details"""
-        # Import agent definitions from autocomplete
         from ..interface.autocomplete import SuntoryCompleter
 
         if not args:
-            # List all agents
             result = "**Available Agents:**\n\n"
             result += "**Specialist Agents:**\n"
             for agent in ["engineer", "qa", "product", "ux", "data", "security", "ops"]:
@@ -407,12 +377,10 @@ class AlfredEnhanced:
 
             return result
         else:
-            # Show specific agent details
             agent_name = args.strip().lower()
             if agent_name in SuntoryCompleter.AGENTS:
                 desc = SuntoryCompleter.AGENTS[agent_name]
 
-                # Add category
                 category = "Magentic-One" if agent_name in ["web_surfer", "file_surfer", "coder", "terminal"] else "Specialist"
 
                 return (
@@ -597,7 +565,6 @@ class AlfredEnhanced:
 
         elif subcmd == "reset":
             self.preferences_manager.preferences.clear()
-            # Delete from storage
             try:
                 self.preferences_manager._delete_existing_preferences()
                 return "✓ All preferences cleared. Tell me how you'd like to be addressed!"
@@ -660,14 +627,12 @@ class AlfredEnhanced:
 
     async def _add_to_history(self, role: str, content: str):
         """Add message to conversation history and database"""
-        # Add to in-memory history
         self.conversation_history.append({
             "role": role,
             "content": content,
             "timestamp": datetime.now().isoformat()
         })
 
-        # Add to database
         try:
             db = await get_db_manager()
             await db.add_conversation(
@@ -678,7 +643,6 @@ class AlfredEnhanced:
         except Exception as e:
             logger.warning(f"Failed to save to database: {e}")
 
-        # Store in vector memory if enabled
         if self.settings.enable_agent_memory:
             try:
                 vector = get_vector_manager()
@@ -698,7 +662,6 @@ class AlfredEnhanced:
         logger.info("Alfred Enhanced shutting down", session_id=self.session_id)
 
         try:
-            # Log session end
             db = await get_db_manager()
             await db.add_conversation(
                 session_id=self.session_id,
@@ -710,7 +673,6 @@ class AlfredEnhanced:
                 }
             )
 
-            # Show final cost summary
             if self.cost_tracker.session_costs:
                 logger.info(
                     "Session cost summary",

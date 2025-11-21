@@ -31,7 +31,6 @@ class Container:
 
     @property
     def settings(self) -> AppSettings:
-        """Get application settings (lazy load)"""
         if self._settings is None:
             from ..config import get_settings
             self._settings = get_settings()
@@ -84,10 +83,7 @@ class Container:
                 connection_pool=self.get_connection_pool(),
             )
 
-            # Auto-discover and register tools
             registry.discover_tools()
-
-            # Register all tools
             self._register_all_tools(registry)
 
             # Register Alfred's tools (requires services, so done after registry creation)
@@ -109,13 +105,11 @@ class Container:
         from ..tools.weather import WeatherForecastTool
         from ..tools.web import WebSearchTool, NewsSearchTool
 
-        # Database tools
         registry.register(
             name=DatabaseQueryTool.NAME,
             tool_class=DatabaseQueryTool,
         )
 
-        # File tools
         registry.register(
             name=FileReadTool.NAME,
             tool_class=FileReadTool,
@@ -131,13 +125,11 @@ class Container:
             tool_class=AppendFileTool,
         )
 
-        # Weather tools
         registry.register(
             name=WeatherForecastTool.NAME,
             tool_class=WeatherForecastTool,
         )
 
-        # Web tools
         registry.register(
             name=WebSearchTool.NAME,
             tool_class=WebSearchTool,
@@ -161,7 +153,6 @@ class Container:
             DelegateToTeamTool,
         )
 
-        # Register tools with Alfred category
         # Note: These tools need special handling in get_tool due to service dependencies
         registry.register(
             name=ListCapabilitiesTool.NAME,
@@ -193,7 +184,6 @@ class Container:
                 tool_registry=self.get_tool_registry(),
             )
 
-            # Auto-discover and register agents
             registry.discover_agents()
 
             self._singletons["agent_registry"] = registry
@@ -259,7 +249,6 @@ class Container:
                 tool_registry=self.get_tool_registry(),
             )
 
-            # Initialize Alfred's services and inject into tool registry
             self._initialize_alfred_services()
 
         return self._singletons["agent_factory"]
@@ -270,12 +259,10 @@ class Container:
 
         This must be called after agent_factory is created to avoid circular dependencies.
         """
-        # Get or create the services
         capability_service = self.get_capability_service()
         history_service = self.get_history_service()
         agent_factory = self._singletons["agent_factory"]
 
-        # Inject services into tool registry for Alfred's tools
         tool_registry = self.get_tool_registry()
         tool_registry.set_alfred_services(
             capability_service=capability_service,
@@ -296,7 +283,6 @@ class Container:
 
             bus = MessageBus(max_history=1000)
 
-            # Add default handlers
             logging_handler = LoggingHandler(log_level="INFO")
             metrics_handler = MetricsHandler()
 
@@ -356,7 +342,6 @@ class Container:
         if "command_executor" not in self._singletons:
             from ..core.command_executor import BashCommandExecutor
 
-            # Get the bash tool from tool registry
             tool_registry = self.get_tool_registry()
             bash_tool = tool_registry.create_tool("shell.bash")
 
@@ -430,26 +415,21 @@ class Container:
 
         Call this on application shutdown.
         """
-        # Shutdown message bus
         if "message_bus" in self._singletons:
             await self._singletons["message_bus"].shutdown()
 
-        # Close connection pool
         if "connection_pool" in self._singletons:
             await self._singletons["connection_pool"].dispose()
 
-        # Shutdown observability
         if "observability" in self._singletons:
             await self._singletons["observability"].shutdown()
 
-        # Cleanup background jobs
         if "background_job_manager" in self._singletons:
             # Kill all running jobs before shutdown
             job_manager = self._singletons["background_job_manager"]
             for job_id in list(job_manager.jobs.keys()):
                 await job_manager.kill_job(job_id)
 
-        # Clear singletons
         self._singletons.clear()
 
     @classmethod

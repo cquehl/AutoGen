@@ -93,12 +93,10 @@ class InMemoryStore(MemoryStore):
     """In-memory storage (not persistent) with thread safety."""
 
     def __init__(self):
-        """Initialize in-memory store."""
         self._data: Dict[str, Dict[str, MemoryEntry]] = {}
         self._lock = asyncio.Lock()
 
     async def save(self, agent_id: str, key: str, value: Any, metadata: Optional[Dict] = None):
-        """Save to memory (thread-safe)."""
         async with self._lock:
             if agent_id not in self._data:
                 self._data[agent_id] = {}
@@ -111,27 +109,23 @@ class InMemoryStore(MemoryStore):
             self._data[agent_id][key] = entry
 
     async def load(self, agent_id: str, key: str) -> Optional[Any]:
-        """Load from memory (thread-safe)."""
         async with self._lock:
             if agent_id in self._data and key in self._data[agent_id]:
                 return self._data[agent_id][key].value
             return None
 
     async def load_all(self, agent_id: str) -> Dict[str, Any]:
-        """Load all entries (thread-safe)."""
         async with self._lock:
             if agent_id not in self._data:
                 return {}
             return {key: entry.value for key, entry in self._data[agent_id].items()}
 
     async def delete(self, agent_id: str, key: str):
-        """Delete entry (thread-safe)."""
         async with self._lock:
             if agent_id in self._data:
                 self._data[agent_id].pop(key, None)
 
     async def clear(self, agent_id: str):
-        """Clear all entries (thread-safe)."""
         async with self._lock:
             self._data.pop(agent_id, None)
 
@@ -153,12 +147,10 @@ class FileStore(MemoryStore):
         self.base_path = Path(base_path)
         self.base_path.mkdir(parents=True, exist_ok=True)
 
-        # Per-agent locks for file access
         self._locks: Dict[str, asyncio.Lock] = {}
         self._locks_lock = asyncio.Lock()
 
     async def _get_lock(self, agent_id: str) -> asyncio.Lock:
-        """Get or create a lock for an agent."""
         async with self._locks_lock:
             if agent_id not in self._locks:
                 self._locks[agent_id] = asyncio.Lock()
@@ -178,7 +170,6 @@ class FileStore(MemoryStore):
                 "dash, and underscore characters"
             )
 
-        # Construct path
         file_path = (self.base_path / f"{agent_id}.json").resolve()
 
         # Ensure it's within base_path (prevent traversal)
@@ -233,7 +224,6 @@ class FileStore(MemoryStore):
             self._lock_file(f, exclusive=True)
 
             try:
-                # Load existing data
                 if file_path.stat().st_size > 0:
                     f.seek(0)
                     try:
@@ -244,18 +234,15 @@ class FileStore(MemoryStore):
                 else:
                     data = {}
 
-                # Add new entry
                 entry = MemoryEntry(key=key, value=value, metadata=metadata or {})
                 data[key] = entry.to_dict()
 
-                # Write back
                 f.seek(0)
                 f.truncate()
                 json.dump(data, f, indent=2)
                 f.flush()
 
             finally:
-                # Release lock
                 self._unlock_file(f)
 
     async def load(self, agent_id: str, key: str) -> Optional[Any]:
@@ -433,14 +420,12 @@ class AgentMemory:
         Returns:
             Stored value or default
         """
-        # Check cache first
         async with self._cache_lock:
             if key in self._cache:
                 # Move to end (most recent)
                 self._cache.move_to_end(key)
                 return self._cache[key]
 
-        # Load from store
         value = await self.store.load(self.agent_id, key)
         if value is not None:
             async with self._cache_lock:

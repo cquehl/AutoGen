@@ -52,22 +52,18 @@ class AlfredMCP:
     """
 
     def __init__(self, mcp_config: Optional[MCPConfig] = None):
-        # Original Alfred initialization
         self.settings = get_settings()
         self.personality = get_alfred_personality()
         self.direct_mode = get_direct_mode()
         self.team_mode = get_team_mode()
         self.cost_tracker = get_cost_tracker()
 
-        # Session management
         self.session_id = str(uuid.uuid4())
         self.conversation_history: List[dict] = []
         self.current_mode = AlfredMode.DIRECT
 
-        # User preferences manager
         self.preferences_manager = UserPreferencesManager(self.session_id)
 
-        # MCP Integration
         self.mcp_config = mcp_config or self._create_default_mcp_config()
         self.mcp_manager: Optional[MCPManager] = None
         self.mcp_bridge: Optional[MCPAutoGenBridge] = None
@@ -85,7 +81,6 @@ class AlfredMCP:
         """Create default MCP configuration for Alfred"""
         servers = []
 
-        # Add filesystem server if enabled
         if self.settings.get("MCP_FS_ENABLED", True):
             fs_config = FILESYSTEM_SERVER
             fs_config.env["ALLOWED_DIRECTORIES"] = self.settings.get(
@@ -94,14 +89,12 @@ class AlfredMCP:
             )
             servers.append(fs_config)
 
-        # Add GitHub server if token is available
         github_token = self.settings.get("GITHUB_TOKEN")
         if github_token and self.settings.get("MCP_GITHUB_ENABLED", True):
             gh_config = GITHUB_SERVER
             gh_config.env["GITHUB_TOKEN"] = github_token
             servers.append(gh_config)
 
-        # Add database server if configured
         if self.settings.get("MCP_DB_ENABLED", False):
             db_config = DATABASE_SERVER
             db_config.env["CONNECTION_STRING"] = self.settings.database_url
@@ -118,16 +111,13 @@ class AlfredMCP:
         logger.info("Initializing Alfred MCP and services...")
 
         try:
-            # Initialize original Alfred services
             db = await get_db_manager()
             vector = get_vector_manager()
             self.preferences_manager.load_from_storage()
 
-            # Initialize MCP if enabled
             if self.mcp_config.enabled:
                 await self._initialize_mcp()
 
-            # Log session start
             await db.add_conversation(
                 session_id=self.session_id,
                 role="system",
@@ -156,18 +146,14 @@ class AlfredMCP:
         """Initialize MCP subsystem"""
         logger.info("Initializing MCP subsystem...")
 
-        # Create MCP manager
         self.mcp_manager = MCPManager(config=self.mcp_config)
         await self.mcp_manager.initialize()
 
-        # Create bridge and adapter
         self.mcp_bridge = MCPAutoGenBridge(self.mcp_manager)
         self.mcp_adapter = AutoGenToolAdapter(self.mcp_bridge)
 
-        # Get available tools for Alfred
         tools = await self.mcp_manager.list_tools("ALFRED")
         for tool in tools:
-            # Convert to AutoGen-compatible function
             tool_func = self.mcp_bridge.convert_mcp_to_autogen_tool(tool, "ALFRED")
             self.available_tools[tool.name] = tool_func
 
@@ -189,14 +175,11 @@ class AlfredMCP:
         set_correlation_id()
 
         try:
-            # Check for MCP-specific commands
             if user_message.startswith("/mcp"):
                 return await self._handle_mcp_command(user_message)
 
-            # Extract and store user preferences
             await self._update_preferences(user_message)
 
-            # Store user message
             db = await get_db_manager()
             await db.add_conversation(
                 session_id=self.session_id,
@@ -204,24 +187,20 @@ class AlfredMCP:
                 content=user_message
             )
 
-            # Select mode with MCP awareness
             mode = await self._select_mode_with_mcp(user_message, force_mode)
             self.current_mode = mode
 
-            # Process based on mode
             if mode == AlfredMode.DIRECT:
                 response = await self._process_direct_with_mcp(user_message)
             else:
                 response = await self._process_team_with_mcp(user_message)
 
-            # Store assistant response
             await db.add_conversation(
                 session_id=self.session_id,
                 role="assistant",
                 content=response
             )
 
-            # Add cost information
             cost_info = self.cost_tracker.get_session_cost(self.session_id)
             response += f"\n\n💰 Session cost: ${cost_info['total_cost']:.4f}"
 
@@ -237,7 +216,6 @@ class AlfredMCP:
         parts = command.split()
 
         if len(parts) == 1 or parts[1] == "status":
-            # Show MCP status
             if not self.mcp_manager:
                 return "MCP is not initialized."
 
@@ -261,7 +239,6 @@ class AlfredMCP:
             return status
 
         elif parts[1] == "tools":
-            # List available tools
             if not self.available_tools:
                 return "No MCP tools available."
 
@@ -275,7 +252,6 @@ class AlfredMCP:
             return response
 
         elif parts[1] == "servers":
-            # List configured servers
             response = "🖥️ **MCP Servers:**\n\n"
             for server in self.mcp_config.servers:
                 response += f"• **{server.name}** ({server.type.value})\n"
@@ -286,7 +262,6 @@ class AlfredMCP:
             return response
 
         elif parts[1] == "reload":
-            # Reload MCP configuration
             await self._initialize_mcp()
             return "✅ MCP configuration reloaded successfully."
 
@@ -298,23 +273,18 @@ class AlfredMCP:
         if force_mode:
             return force_mode
 
-        # Check if message requires MCP tools
         mcp_keywords = ["file", "filesystem", "github", "repository", "database", "query"]
         if any(keyword in user_message.lower() for keyword in mcp_keywords):
-            # Check if tools are available
             if self.available_tools:
                 # Prefer team mode for complex MCP operations
                 if any(word in user_message.lower() for word in ["analyze", "refactor", "implement", "create"]):
                     return AlfredMode.TEAM
 
-        # Original mode selection logic
         return await self.direct_mode.select_mode(user_message)
 
     async def _process_direct_with_mcp(self, message: str) -> str:
         """Process message in direct mode with MCP tool access"""
-        # Check if MCP tools might be needed
         if self._should_use_mcp_tools(message):
-            # Enhance the message with available tools information
             tools_context = self._get_tools_context()
             enhanced_message = f"{message}\n\n[Available MCP Tools: {tools_context}]"
         else:
@@ -324,9 +294,7 @@ class AlfredMCP:
 
     async def _process_team_with_mcp(self, message: str) -> str:
         """Process message in team mode with MCP tool access"""
-        # Provide MCP tools to relevant agents
         if self.mcp_adapter:
-            # Register tools with specific agents
             await self._register_mcp_tools_with_agents()
 
         return await self.team_mode.process(message, self.preferences_manager.get_preferences())
@@ -336,7 +304,6 @@ class AlfredMCP:
         if not self.mcp_adapter:
             return
 
-        # Map of agents to register tools with
         agent_tool_mapping = {
             "CODER": ["filesystem", "github"],
             "DATA": ["database", "filesystem"],
@@ -356,7 +323,6 @@ class AlfredMCP:
         if not self.available_tools:
             return False
 
-        # Check for tool-related keywords
         tool_indicators = [
             "read", "write", "create", "delete", "list", "search",
             "file", "directory", "folder", "code", "repository",
@@ -372,7 +338,7 @@ class AlfredMCP:
         if not self.available_tools:
             return "None"
 
-        tool_names = list(self.available_tools.keys())[:5]  # First 5 tools
+        tool_names = list(self.available_tools.keys())[:5]
         context = ", ".join(tool_names)
 
         if len(self.available_tools) > 5:
@@ -392,16 +358,13 @@ class AlfredMCP:
         set_correlation_id()
 
         try:
-            # Check for MCP commands (non-streaming)
             if user_message.startswith("/mcp"):
                 response = await self._handle_mcp_command(user_message)
                 yield response
                 return
 
-            # Extract preferences
             await self._update_preferences(user_message)
 
-            # Store user message
             db = await get_db_manager()
             await db.add_conversation(
                 session_id=self.session_id,
@@ -409,11 +372,9 @@ class AlfredMCP:
                 content=user_message
             )
 
-            # Select mode with MCP awareness
             mode = await self._select_mode_with_mcp(user_message, None)
             self.current_mode = mode
 
-            # Stream based on mode
             full_response = ""
             if mode == AlfredMode.DIRECT:
                 async for token in self._process_direct_streaming_with_mcp(user_message):
@@ -425,14 +386,12 @@ class AlfredMCP:
                 full_response = response
                 yield response
 
-            # Store response
             await db.add_conversation(
                 session_id=self.session_id,
                 role="assistant",
                 content=full_response
             )
 
-            # Add cost information
             cost_info = self.cost_tracker.get_session_cost(self.session_id)
             yield f"\n\n💰 Session cost: ${cost_info['total_cost']:.4f}"
 
@@ -443,7 +402,6 @@ class AlfredMCP:
 
     async def _process_direct_streaming_with_mcp(self, message: str) -> AsyncIterator[str]:
         """Stream direct mode response with MCP awareness"""
-        # Add tools context if needed
         if self._should_use_mcp_tools(message):
             tools_context = self._get_tools_context()
             enhanced_message = f"{message}\n\n[Available MCP Tools: {tools_context}]"
@@ -478,14 +436,11 @@ class AlfredMCP:
         logger.info("Shutting down Alfred MCP...")
 
         try:
-            # Save preferences
             self.preferences_manager.save_to_storage()
 
-            # Shutdown MCP if initialized
             if self.mcp_manager:
                 await self.mcp_manager.shutdown()
 
-            # Log session end
             db = await get_db_manager()
             await db.add_conversation(
                 session_id=self.session_id,

@@ -45,9 +45,7 @@ class SuntorySettings(BaseSettings):
         extra="ignore"
     )
 
-    # =================================================================
     # LLM Provider Configuration
-    # =================================================================
 
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
@@ -64,9 +62,7 @@ class SuntorySettings(BaseSettings):
         description="Default LLM model to use"
     )
 
-    # =================================================================
     # System Configuration
-    # =================================================================
 
     environment: Environment = Field(
         default=Environment.DEVELOPMENT,
@@ -93,9 +89,7 @@ class SuntorySettings(BaseSettings):
         description="Workspace directory for agent operations"
     )
 
-    # =================================================================
     # Docker Configuration
-    # =================================================================
 
     docker_enabled: bool = Field(
         default=True,
@@ -107,9 +101,7 @@ class SuntorySettings(BaseSettings):
         description="Docker operation timeout in seconds"
     )
 
-    # =================================================================
     # Security Configuration
-    # =================================================================
 
     allowed_directories: List[str] = Field(
         default_factory=lambda: ["./v3/workspace", "./v3/data", "./v3/logs"],
@@ -121,9 +113,7 @@ class SuntorySettings(BaseSettings):
         description="Maximum time for operations in seconds"
     )
 
-    # =================================================================
     # Observability Configuration
-    # =================================================================
 
     enable_telemetry: bool = Field(
         default=True,
@@ -140,9 +130,7 @@ class SuntorySettings(BaseSettings):
         description="Service name for tracing"
     )
 
-    # =================================================================
     # Alfred Configuration
-    # =================================================================
 
     alfred_greeting_style: GreetingStyle = Field(
         default=GreetingStyle.TIME_AWARE,
@@ -154,9 +142,7 @@ class SuntorySettings(BaseSettings):
         description="Alfred's personality mode"
     )
 
-    # =================================================================
     # Agent Configuration
-    # =================================================================
 
     max_team_turns: int = Field(
         default=30,
@@ -173,9 +159,7 @@ class SuntorySettings(BaseSettings):
         description="Enable persistent agent memory"
     )
 
-    # =================================================================
     # User Preference Privacy Settings
-    # =================================================================
 
     enable_llm_preference_extraction: bool = Field(
         default=True,
@@ -187,9 +171,7 @@ class SuntorySettings(BaseSettings):
         description="Number of days to retain user preferences (0 = forever)"
     )
 
-    # =================================================================
     # Validators
-    # =================================================================
 
     @field_validator("workspace_dir", "chroma_db_path")
     @classmethod
@@ -207,9 +189,7 @@ class SuntorySettings(BaseSettings):
             Path(dir_path).mkdir(parents=True, exist_ok=True)
         return v
 
-    # =================================================================
     # Helper Methods
-    # =================================================================
 
     def has_llm_provider(self) -> bool:
         """Check if at least one LLM provider is configured"""
