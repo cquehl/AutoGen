@@ -148,7 +148,7 @@ class MCPMessage:
 @dataclass
 class MCPRequest(MCPMessage):
     """MCP request message"""
-    method: str
+    method: str = ""
     params: Optional[Dict[str, Any]] = None
 
 
@@ -162,7 +162,7 @@ class MCPResponse(MCPMessage):
 @dataclass
 class MCPNotification(MCPMessage):
     """MCP notification message"""
-    method: str
+    method: str = ""
     params: Optional[Dict[str, Any]] = None
 
 
