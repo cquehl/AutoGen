@@ -34,7 +34,7 @@ Base = declarative_base()
 # =============================================================================
 
 class ConversationHistory(Base):
-    """Conversation history table"""
+    """Conversation history table."""
     __tablename__ = "conversation_history"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -47,7 +47,7 @@ class ConversationHistory(Base):
 
 
 class AgentAction(Base):
-    """Agent action log"""
+    """Agent action log."""
     __tablename__ = "agent_actions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -61,7 +61,7 @@ class AgentAction(Base):
 
 
 class SessionMetadata(Base):
-    """Session metadata"""
+    """Session metadata."""
     __tablename__ = "session_metadata"
 
     session_id = Column(String(100), primary_key=True)
@@ -76,13 +76,12 @@ class SessionMetadata(Base):
 # =============================================================================
 
 class DatabaseManager:
-    """Manages SQLite database for session history"""
+    """Manages SQLite database for session history."""
 
     def __init__(self, database_url: Optional[str] = None):
         settings = get_settings()
         self.database_url = database_url or settings.database_url
 
-        # Convert SQLite URL for async usage
         if self.database_url.startswith("sqlite:///"):
             async_url = self.database_url.replace("sqlite:///", "sqlite+aiosqlite:///")
         else:
@@ -96,7 +95,7 @@ class DatabaseManager:
         logger.info("Database manager initialized", database_url=self.database_url)
 
     async def initialize(self):
-        """Create all tables"""
+        """Create all database tables."""
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Database tables created")
@@ -109,7 +108,7 @@ class DatabaseManager:
         correlation_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None
     ):
-        """Add conversation entry"""
+        """Add conversation entry to database."""
         async with self.async_session_maker() as session:
             try:
                 entry = ConversationHistory(
@@ -135,7 +134,7 @@ class DatabaseManager:
         correlation_id: Optional[str] = None,
         result: Optional[Dict[str, Any]] = None
     ):
-        """Add agent action log"""
+        """Add agent action log to database."""
         async with self.async_session_maker() as session:
             try:
                 action = AgentAction(
@@ -158,9 +157,7 @@ class DatabaseManager:
         session_id: str,
         limit: Optional[int] = None
     ) -> List[Dict[str, Any]]:
-        """Get conversation history for a session"""
-        # For simplicity, using synchronous query
-        # In production, use async queries properly
+        """Get conversation history for session, ordered chronologically."""
         from sqlalchemy import select
 
         async with self.async_session_maker() as session:
@@ -182,7 +179,7 @@ class DatabaseManager:
                     "timestamp": entry.timestamp.isoformat(),
                     "metadata": json.loads(entry.extra_data) if entry.extra_data else None
                 }
-                for entry in reversed(entries)  # Return in chronological order
+                for entry in reversed(entries)
             ]
 
 
@@ -191,16 +188,14 @@ class DatabaseManager:
 # =============================================================================
 
 class VectorStoreManager:
-    """Manages ChromaDB for agent memory and RAG"""
+    """Manages ChromaDB for agent memory and RAG."""
 
     def __init__(self, persist_directory: Optional[str] = None):
         settings = get_settings()
         self.persist_directory = persist_directory or str(settings.get_chroma_path())
 
-        # Ensure directory exists
         Path(self.persist_directory).mkdir(parents=True, exist_ok=True)
 
-        # Initialize ChromaDB client
         self.client = chromadb.PersistentClient(
             path=self.persist_directory,
             settings=ChromaSettings(
@@ -215,7 +210,7 @@ class VectorStoreManager:
         )
 
     def get_or_create_collection(self, name: str):
-        """Get or create a collection"""
+        """Get or create a ChromaDB collection."""
         return self.client.get_or_create_collection(
             name=name,
             metadata={"description": f"Agent memory collection: {name}"}
@@ -228,10 +223,9 @@ class VectorStoreManager:
         metadatas: Optional[List[Dict[str, Any]]] = None,
         ids: Optional[List[str]] = None
     ):
-        """Add documents to agent memory"""
+        """Add documents to agent memory collection."""
         collection = self.get_or_create_collection(collection_name)
 
-        # Generate IDs if not provided
         if ids is None:
             import uuid
             ids = [str(uuid.uuid4()) for _ in documents]
@@ -254,7 +248,7 @@ class VectorStoreManager:
         query_texts: List[str],
         n_results: int = 5
     ) -> Dict[str, Any]:
-        """Query agent memory"""
+        """Query agent memory by semantic similarity."""
         collection = self.get_or_create_collection(collection_name)
 
         results = collection.query(
@@ -271,7 +265,7 @@ class VectorStoreManager:
         return results
 
     def clear_collection(self, collection_name: str):
-        """Clear a collection"""
+        """Delete a collection from vector store."""
         try:
             self.client.delete_collection(name=collection_name)
             logger.info("Cleared collection", collection=collection_name)
@@ -288,7 +282,7 @@ _vector_manager: Optional[VectorStoreManager] = None
 
 
 async def get_db_manager() -> DatabaseManager:
-    """Get or create database manager singleton"""
+    """Get or create database manager singleton."""
     global _db_manager
     if _db_manager is None:
         _db_manager = DatabaseManager()
@@ -297,7 +291,7 @@ async def get_db_manager() -> DatabaseManager:
 
 
 def get_vector_manager() -> VectorStoreManager:
-    """Get or create vector store manager singleton"""
+    """Get or create vector store manager singleton."""
     global _vector_manager
     if _vector_manager is None:
         _vector_manager = VectorStoreManager()
@@ -305,7 +299,7 @@ def get_vector_manager() -> VectorStoreManager:
 
 
 def reset_persistence():
-    """Reset persistence managers (useful for testing)"""
+    """Reset persistence managers (for testing)."""
     global _db_manager, _vector_manager
     _db_manager = None
     _vector_manager = None

@@ -119,45 +119,23 @@ class UserPreferencesManager:
         self._update_lock = threading.Lock()
 
     def extract_gender_preference(self, user_message: str) -> Optional[str]:
-        """
-        Extract gender preference from user message.
-
-        Args:
-            user_message: User's message
-
-        Returns:
-            'male', 'female', or None if not detected
-        """
+        """Extract gender preference from user message ('male', 'female', or None)."""
         from .preference_patterns import extract_gender_preference as extract_gender
         return extract_gender(user_message)
 
     def extract_name(self, user_message: str) -> Optional[str]:
-        """
-        Extract name from user message.
-
-        Args:
-            user_message: User's message
-
-        Returns:
-            Name if detected, None otherwise
-        """
+        """Extract name from user message."""
         from .preference_patterns import extract_name as extract_name_pattern
         return extract_name_pattern(user_message, max_length=100)
 
     async def update_from_message_async(self, user_message: str) -> Dict[str, str]:
         """
-        Update preferences from user message using LLM extraction (async version).
-
-        Thread-safe: Uses async lock to prevent concurrent modification.
+        Update preferences from user message using LLM extraction.
 
         Optimization: Only triggers LLM extraction if message contains "memorize" keyword.
         This reduces API calls by 99.9% and gives user explicit control.
 
-        Args:
-            user_message: User's message
-
-        Returns:
-            Dictionary of ONLY updated preferences (not all preferences)
+        Returns only updated preferences, not all preferences.
         """
         # OPTIMIZATION: Quick heuristic check before expensive LLM call
         # Only extract preferences if user explicitly says "memorize"
@@ -203,28 +181,11 @@ class UserPreferencesManager:
         return updated_prefs
 
     def update_from_message(self, user_message: str) -> Dict[str, str]:
-        """
-        Synchronous version for backwards compatibility.
-        Uses regex extraction only.
-
-        Args:
-            user_message: User's message
-
-        Returns:
-            Dictionary of ONLY updated preferences (not all preferences)
-        """
+        """Synchronous version using regex extraction only."""
         return self._update_with_regex(user_message)
 
     def _update_with_regex(self, user_message: str) -> Dict[str, str]:
-        """
-        Update preferences using regex extraction (legacy method).
-
-        Args:
-            user_message: User's message
-
-        Returns:
-            Dictionary of updated preferences
-        """
+        """Update preferences using regex extraction."""
         updated_prefs = {}
 
         # Check for gender preference
@@ -252,15 +213,7 @@ class UserPreferencesManager:
         return updated_prefs
 
     def _save_to_storage(self, max_retries: int = 3):
-        """
-        Save preferences to vector storage with deduplication and retry logic.
-
-        Args:
-            max_retries: Maximum number of retry attempts
-
-        Raises:
-            PreferenceStorageError: If save fails after all retries
-        """
+        """Save preferences to vector storage with deduplication and retry logic."""
         last_error = None
 
         for attempt in range(max_retries):
@@ -351,12 +304,7 @@ class UserPreferencesManager:
             logger.warning(f"Failed to delete existing preferences: {e}")
 
     def load_from_storage(self) -> Dict[str, str]:
-        """
-        Load preferences from vector storage.
-
-        Returns:
-            Dictionary of preferences
-        """
+        """Load preferences from vector storage."""
         try:
             # Query for all preferences (fix: query_texts expects a list)
             results = self.vector_manager.query_memory(
@@ -388,15 +336,7 @@ class UserPreferencesManager:
         return self.preferences.copy()
 
     def get_confirmation_message(self, updated_prefs: Dict[str, str]) -> Optional[str]:
-        """
-        Generate a confirmation message for updated preferences.
-
-        Args:
-            updated_prefs: Preferences that were just updated
-
-        Returns:
-            Confirmation message or None
-        """
+        """Generate a confirmation message for updated preferences."""
         if not updated_prefs:
             return None
 

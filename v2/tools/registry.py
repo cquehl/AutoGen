@@ -19,16 +19,7 @@ class ToolRegistry:
     """
 
     def __init__(self, security_middleware, connection_pool, capability_service=None, history_service=None, agent_factory=None):
-        """
-        Initialize tool registry.
-
-        Args:
-            security_middleware: Security middleware for validation
-            connection_pool: Database connection pool manager
-            capability_service: Optional CapabilityService for Alfred tools
-            history_service: Optional HistoryService for Alfred tools
-            agent_factory: Optional AgentFactory for Alfred tools
-        """
+        """Initialize tool registry."""
         self.security_middleware = security_middleware
         self.connection_pool = connection_pool
         self.capability_service = capability_service
@@ -45,16 +36,7 @@ class ToolRegistry:
         category: Optional[ToolCategory] = None,
         requires_security: Optional[bool] = None,
     ):
-        """
-        Register a tool type.
-
-        Args:
-            name: Tool name (unique identifier, e.g., "database.query")
-            tool_class: Tool class (must inherit from BaseTool)
-            description: Tool description
-            category: Tool category
-            requires_security: Whether tool requires security validation
-        """
+        """Register a tool type."""
         if not issubclass(tool_class, BaseTool):
             raise TypeError(f"{tool_class} must inherit from BaseTool")
 
@@ -107,13 +89,6 @@ class ToolRegistry:
         """
         Create a tool instance by name.
 
-        Args:
-            name: Tool name (registered name)
-            **kwargs: Tool-specific configuration
-
-        Returns:
-            BaseTool instance
-
         Raises:
             ValueError: If tool not found
         """
@@ -123,26 +98,20 @@ class ToolRegistry:
             )
 
         metadata = self._tools[name]
-
-        # Inject dependencies based on tool requirements
         tool_kwargs = kwargs.copy()
 
-        # Inject security middleware if needed
         if metadata.requires_security:
             tool_kwargs["security_middleware"] = self.security_middleware
 
-        # Inject connection pool for database tools
         if metadata.category == ToolCategory.DATABASE:
             tool_kwargs["connection_pool"] = self.connection_pool
 
-        # Inject services for META tools (introspection and system capabilities)
-        # Use introspection to only inject what the tool accepts
+        # Use introspection to only inject services that META tools accept
         if metadata.category == ToolCategory.META:
             import inspect
             sig = inspect.signature(metadata.tool_class.__init__)
             params = sig.parameters
 
-            # Only inject services that the tool actually accepts
             if "capability_service" in params and self.capability_service:
                 tool_kwargs["capability_service"] = self.capability_service
 
@@ -152,22 +121,12 @@ class ToolRegistry:
             if "agent_factory" in params and self.agent_factory:
                 tool_kwargs["agent_factory"] = self.agent_factory
 
-        # Create tool instance
         tool = metadata.tool_class(**tool_kwargs)
 
         return tool
 
     def get_tool(self, name: str, **kwargs) -> Optional[FunctionTool]:
-        """
-        Get AutoGen FunctionTool by name (cached).
-
-        Args:
-            name: Tool name
-            **kwargs: Tool configuration
-
-        Returns:
-            FunctionTool instance or None if not found
-        """
+        """Get AutoGen FunctionTool by name."""
         if name not in self._tools:
             return None
 
@@ -175,9 +134,7 @@ class ToolRegistry:
         # Note: We don't cache tool instances since they may have different configurations
         tool_instance = self.create_tool(name, **kwargs)
 
-        # Create FunctionTool directly from tool's execute method
-        # AutoGen will automatically wrap it and extract the signature
-        # Note: AutoGen requires names with only letters, numbers, _ and -
+        # AutoGen requires names with only letters, numbers, _ and -
         safe_name = name.replace(".", "_")
         function_tool = FunctionTool(
             tool_instance.execute,
@@ -192,19 +149,9 @@ class ToolRegistry:
         category: Optional[ToolCategory] = None,
         requires_security: Optional[bool] = None,
     ) -> List[Dict]:
-        """
-        List all registered tools.
-
-        Args:
-            category: Filter by category (optional)
-            requires_security: Filter by security requirement (optional)
-
-        Returns:
-            List of tool metadata dicts
-        """
+        """List all registered tools, optionally filtered by category or security requirement."""
         tools = []
         for metadata in self._tools.values():
-            # Apply filters
             if category is not None and metadata.category != category:
                 continue
             if requires_security is not None and metadata.requires_security != requires_security:
@@ -215,15 +162,7 @@ class ToolRegistry:
         return tools
 
     def get_tools_by_category(self, category: ToolCategory) -> List[str]:
-        """
-        Get all tool names in a category.
-
-        Args:
-            category: Tool category
-
-        Returns:
-            List of tool names
-        """
+        """Get all tool names in a category."""
         return [
             name
             for name, metadata in self._tools.items()
@@ -231,16 +170,7 @@ class ToolRegistry:
         ]
 
     def get_tools_for_agent(self, agent_type: str) -> List[str]:
-        """
-        Get recommended tools for an agent type.
-
-        Args:
-            agent_type: Agent type (e.g., "data_analyst", "web_surfer")
-
-        Returns:
-            List of recommended tool names
-        """
-        # Define tool mappings for common agent types
+        """Get recommended tools for an agent type."""
         # Only includes currently implemented tools
         AGENT_TOOL_MAPPINGS = {
             "data_analyst": [
@@ -271,25 +201,11 @@ class ToolRegistry:
         return AGENT_TOOL_MAPPINGS.get(agent_type, [])
 
     def get_categories(self) -> List[str]:
-        """
-        Get all tool categories.
-
-        Returns:
-            List of unique categories
-        """
+        """Get all tool categories."""
         return list(set(m.category.value for m in self._tools.values()))
 
     def set_alfred_services(self, capability_service, history_service, agent_factory):
-        """
-        Set services needed for Alfred's tools.
-
-        This is called after services are initialized to inject dependencies.
-
-        Args:
-            capability_service: CapabilityService instance
-            history_service: HistoryService instance
-            agent_factory: AgentFactory instance
-        """
+        """Set services needed for Alfred's tools. Called after services are initialized."""
         self.capability_service = capability_service
         self.history_service = history_service
         self.agent_factory = agent_factory
@@ -300,12 +216,7 @@ class ToolRegistry:
                 del self._tool_instances[tool_name]
 
     def discover_tools(self):
-        """
-        Auto-discover and register tools from the tools/ directory.
-
-        This scans for all tool modules and registers them.
-        """
-        # Import tool modules to trigger registration
+        """Auto-discover and register tools from the tools/ directory."""
         try:
             from .database import query_tool
             from .file import read_tool, write_tool, append_tool

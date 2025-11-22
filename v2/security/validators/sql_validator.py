@@ -26,26 +26,13 @@ class SQLValidator:
     """
 
     def __init__(self, config):
-        """
-        Initialize SQL validator.
-
-        Args:
-            config: SecurityConfig with allowed commands and blocked patterns
-        """
+        """Initialize SQL validator."""
         self.allowed_commands = config.allowed_sql_commands
         self.blocked_patterns = config.blocked_sql_patterns
         self.max_length = config.max_query_length
 
     def validate(self, query: str) -> Tuple[bool, Optional[str], QueryType]:
-        """
-        Validate SQL query for security.
-
-        Args:
-            query: SQL query to validate
-
-        Returns:
-            (is_valid, error_message, query_type) tuple
-        """
+        """Validate SQL query for security. Returns (is_valid, error_message, query_type)."""
         if not query or not query.strip():
             return False, "Empty query not allowed", QueryType.UNKNOWN
 
@@ -83,15 +70,7 @@ class SQLValidator:
         return True, None, query_type
 
     def is_safe(self, query: str) -> bool:
-        """
-        Check if query is safe (simple boolean check).
-
-        Args:
-            query: SQL query
-
-        Returns:
-            True if safe, False otherwise
-        """
+        """Check if query is safe."""
         is_valid, _, _ = self.validate(query)
         return is_valid
 
@@ -109,15 +88,7 @@ class SQLValidator:
             return QueryType.UNKNOWN
 
     def _has_multiple_statements(self, query: str) -> bool:
-        """
-        Check if query contains multiple statements.
-
-        Args:
-            query: SQL query
-
-        Returns:
-            True if multiple statements detected
-        """
+        """Check if query contains multiple statements."""
         # Remove trailing semicolon if exists
         query = query.strip()
         if query.endswith(';'):

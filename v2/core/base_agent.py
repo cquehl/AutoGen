@@ -33,14 +33,7 @@ class BaseAgent(ABC):
         model_client: ChatCompletionClient,
         tools: Optional[List[FunctionTool]] = None,
     ):
-        """
-        Initialize base agent.
-
-        Args:
-            config: Agent configuration
-            model_client: LLM client
-            tools: List of tools available to agent
-        """
+        """Initialize base agent."""
         self.config = config
         self.model_client = model_client
         self.tools = tools or []
@@ -49,20 +42,11 @@ class BaseAgent(ABC):
     @property
     @abstractmethod
     def system_message(self) -> str:
-        """
-        System message for the agent.
-
-        Must be implemented by subclasses.
-        """
+        """System message for the agent. Must be implemented by subclasses."""
         pass
 
     def create_agent(self) -> AssistantAgent:
-        """
-        Create the underlying AssistantAgent.
-
-        Returns:
-            Configured AssistantAgent
-        """
+        """Create the underlying AssistantAgent."""
         if self._agent is None:
             self._agent = AssistantAgent(
                 name=self.config.name,
@@ -74,22 +58,12 @@ class BaseAgent(ABC):
         return self._agent
 
     def get_agent(self) -> AssistantAgent:
-        """
-        Get the agent (creates if not exists).
-
-        Returns:
-            AssistantAgent instance
-        """
+        """Get the agent (creates if not exists)."""
         return self.create_agent()
 
     @classmethod
     def get_metadata(cls) -> Dict[str, Any]:
-        """
-        Get agent metadata.
-
-        Returns:
-            Metadata dictionary
-        """
+        """Get agent metadata."""
         return {
             "name": cls.NAME,
             "description": cls.DESCRIPTION,

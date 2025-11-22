@@ -18,7 +18,6 @@ from .core.base_tool import ToolResult
 
 import logging
 
-# Constants
 DEFAULT_AGENT = "alfred"
 MAX_QUERY_LENGTH = 10000
 
@@ -249,7 +248,6 @@ def extract_number_from_query(query: str, default: int = 5) -> int:
     """
     import re
 
-    # Try to find a number in the query
     numbers = re.findall(r'\b(\d+)\b', query)
     if numbers:
         try:
@@ -257,7 +255,6 @@ def extract_number_from_query(query: str, default: int = 5) -> int:
         except (ValueError, IndexError):
             pass
 
-    # Check for word numbers
     word_to_num = {
         "five": 5, "ten": 10, "fifteen": 15, "twenty": 20,
         "thirty": 30, "fifty": 50, "hundred": 100
@@ -284,11 +281,9 @@ def format_tool_result(result: ToolResult, prefix: str = "Alfred") -> str:
     if not result.success:
         return f"[bold white]{prefix}:[/bold white] {result.error}"
 
-    # If the result has a pre-formatted display string, use it
     if isinstance(result.data, dict) and "formatted" in result.data:
         return f"[bold white]{prefix}:[/bold white] Certainly.\n\n{result.data['formatted']}"
 
-    # Otherwise, try to display the raw data
     return f"[bold white]{prefix}:[/bold white] {result.data}"
 
 
@@ -303,7 +298,6 @@ async def process_query(query: str, agent_name: str = DEFAULT_AGENT) -> dict:
     Returns:
         Dict with 'response' (str) and optionally 'switch_to_agent' (str)
     """
-    # Input validation
     if not query or not query.strip():
         return {"response": ""}
 
@@ -318,12 +312,9 @@ async def process_query(query: str, agent_name: str = DEFAULT_AGENT) -> dict:
 
     try:
         if agent_name == DEFAULT_AGENT:
-            # Alfred: Detect intent and call appropriate tools
             query_lower = query.lower()
             logger.info(f"Processing Alfred query: {query[:100]}...")
 
-            # Pattern 1: Capabilities / "What can you do?"
-            # More specific: must start with question words or have "list/show"
             if any(query_lower.startswith(phrase) for phrase in ["what can", "what are", "list ", "show "]) or \
                any(phrase in query_lower for phrase in ["list capabilities", "show capabilities", "what capabilities"]):
 
@@ -341,22 +332,19 @@ async def process_query(query: str, agent_name: str = DEFAULT_AGENT) -> dict:
                 result = await tool.execute(category=category)
                 return {"response": format_tool_result(result)}
 
-            # Pattern 2: History / "Show my actions"
-            # More specific: must mention "history" or "action" with relevant context
             elif any(phrase in query_lower for phrase in [
                 "my history", "show history", "view history",
                 "my action", "last action", "recent action",
                 "what did i do", "what have i done",
             ]):
                 limit = extract_number_from_query(query, default=5)
-                limit = min(limit, 100)  # Cap at 100
+                limit = min(limit, 100)
 
                 logger.info(f"Calling show_history tool with limit={limit}")
                 tool = tool_registry.create_tool("alfred.show_history")
                 result = await tool.execute(scope="recent", limit=limit)
                 return {"response": format_tool_result(result)}
 
-            # Pattern 3: Delegation / "Delegate to team"
             elif any(phrase in query_lower for phrase in [
                 "delegate to",
                 "use team",
@@ -365,10 +353,8 @@ async def process_query(query: str, agent_name: str = DEFAULT_AGENT) -> dict:
                 "handoff to",
                 "switch to team",
             ]):
-                # Dynamically fetch available teams
                 teams, team_names = get_available_teams(container)
 
-                # Try to extract team name from query
                 found_team = None
                 for team_info in teams:
                     team_name_check = team_info.get("name", "").lower()
@@ -382,7 +368,6 @@ async def process_query(query: str, agent_name: str = DEFAULT_AGENT) -> dict:
                     result = await tool.execute(team_name=found_team, task=query)
                     return {"response": format_tool_result(result)}
                 else:
-                    # Show available teams dynamically
                     team_list = "\n  • ".join([t.get("name", "Unknown") for t in teams]) if teams else "None configured"
                     example_team = teams[0].get('name', 'team_name') if teams else 'team_name'
                     return {"response": f"""[bold white]Alfred:[/bold white] I'd be delighted to delegate, but I need to know which team.
@@ -392,17 +377,14 @@ async def process_query(query: str, agent_name: str = DEFAULT_AGENT) -> dict:
 
 [dim]Try: "Delegate to {example_team}" or use /teams to see details.[/dim]"""}
 
-            # Pattern 4: Agent switching / "Use agent X"
             elif any(phrase in query_lower for phrase in [
                 "use agent",
                 "switch to agent",
                 "work with agent",
                 "talk to agent",
             ]):
-                # Get list of available agents
                 agents, agent_names = get_available_agents(container)
 
-                # Look for agent name in query
                 found_agent = None
                 for agent_info in agents:
                     agent_name_check = agent_info.get("name", "").lower()
@@ -421,7 +403,6 @@ async def process_query(query: str, agent_name: str = DEFAULT_AGENT) -> dict:
                         "switch_to_agent": found_agent.lower()
                     }
                 else:
-                    # Show available agents
                     agent_list = "\n  • ".join([a.get("name", "Unknown") for a in agents]) if agents else "None registered"
                     example_agent = agents[0].get('name', 'agent_name') if agents else 'agent_name'
                     return {"response": f"""[bold white]Alfred:[/bold white] Which agent would you like to use?
@@ -431,12 +412,10 @@ async def process_query(query: str, agent_name: str = DEFAULT_AGENT) -> dict:
 
 [dim]Try: "Use agent {example_agent}" or /agents for details.[/dim]"""}
 
-            # Pattern 5: Help request
             elif any(phrase in query_lower for phrase in ["help", "how do i", "how can i"]):
                 show_help()
                 return {"response": "[dim](Help displayed above)[/dim]"}
 
-            # Pattern 6: No match - provide helpful suggestions
             else:
                 logger.info(f"No pattern matched for query: {query[:100]}")
                 return {"response": f"""[bold white]Alfred:[/bold white] I'm not quite certain how to assist with: "{query}"
@@ -450,7 +429,6 @@ async def process_query(query: str, agent_name: str = DEFAULT_AGENT) -> dict:
 [cyan]Tip:[/cyan] [dim]Use /help to see all slash commands.[/dim]"""}
 
         else:
-            # Other agents: Placeholder for future direct agent interaction
             logger.info(f"Query passed to non-Alfred agent: {agent_name}")
             return {"response": f"""[bold white]{agent_name.title()}:[/bold white] Task received: {query}
 
@@ -482,12 +460,10 @@ async def interactive_loop():
     console.print("\n[dim]Type [bold]/help[/bold] for available commands, or just ask Alfred anything![/dim]")
     console.print("[dim]Tip: Press Ctrl+C to exit[/dim]\n")
 
-    # Initialize container
     container = get_container()
     obs = container.get_observability_manager()
     obs.initialize()
 
-    # Setup signal handlers for graceful shutdown
     shutdown_event = asyncio.Event()
     cleanup_completed = False
 
@@ -496,7 +472,6 @@ async def interactive_loop():
         logger.info(f"Received signal {signum}, initiating graceful shutdown")
         shutdown_event.set()
 
-    # Register handlers for SIGTERM and SIGINT early, before entering the main loop
     # CRITICAL: Only register signal handlers on Unix-like systems
     if hasattr(signal, 'SIGTERM'):
         try:
@@ -504,16 +479,13 @@ async def interactive_loop():
             for sig in (signal.SIGTERM, signal.SIGINT):
                 loop.add_signal_handler(sig, lambda s=sig: signal_handler(s))
         except (RuntimeError, OSError) as e:
-            # Signal handling may not be available in some environments (Windows, testing)
             logger.warning(f"Could not register signal handlers: {e}")
 
-    # Current agent mode (alfred is default)
     current_agent = DEFAULT_AGENT
 
     try:
         while True:
             try:
-                # Show prompt based on current agent
                 if current_agent == DEFAULT_AGENT:
                     console.print("\n[bold cyan]You[/bold cyan]: ", end="")
                 else:
@@ -521,13 +493,11 @@ async def interactive_loop():
 
                 user_input = input()
 
-                # Strip whitespace early
                 user_input = user_input.strip() if user_input else ""
 
                 if not user_input:
                     continue
 
-                # Handle commands
                 if user_input.startswith("/"):
                     cmd = user_input.lower().strip()
 
@@ -551,11 +521,9 @@ async def interactive_loop():
                         else:
                             console.print("\n[bold white]Alfred:[/bold white] I'm already here. At your service.")
                     elif cmd.startswith("/use_agent"):
-                        # Extract agent name from command
                         parts = user_input.split(maxsplit=1)
                         if len(parts) > 1:
                             requested_agent = parts[1].strip().lower()
-                            # Validate agent exists using helper function
                             agents, agent_names = get_available_agents(container)
 
                             if requested_agent in agent_names:
@@ -579,15 +547,12 @@ async def interactive_loop():
                         console.print(f"[red]Unknown command: {cmd}[/red]")
                         console.print("Type [bold]/help[/bold] for available commands")
                 else:
-                    # Process as query using current agent
                     with console.status("[bold green]Thinking...[/bold green]"):
                         result = await process_query(user_input, current_agent)
 
-                    # Handle result (dict with 'response' and optionally 'switch_to_agent')
                     if result.get("response"):
                         console.print(f"\n{result['response']}")
 
-                    # Handle agent switching from natural language
                     if "switch_to_agent" in result:
                         current_agent = result["switch_to_agent"]
                         logger.info(f"Switched to agent: {current_agent}")

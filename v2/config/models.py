@@ -21,7 +21,7 @@ class ModelProvider(str, Enum):
 
 
 class DatabaseConfig(BaseModel):
-    """Database configuration with connection pooling"""
+    """Database configuration with connection pooling."""
 
     url: str = Field(
         default="sqlite:///./data/yamazaki.db",
@@ -59,20 +59,19 @@ class DatabaseConfig(BaseModel):
 
     @property
     def async_url(self) -> str:
-        """Convert to async-compatible URL"""
+        """Convert to async-compatible URL for async drivers."""
         if self.url.startswith("sqlite:///"):
             return self.url.replace("sqlite:///", "sqlite+aiosqlite:///")
-        elif self.url.startswith("postgresql://"):
+        if self.url.startswith("postgresql://"):
             return self.url.replace("postgresql://", "postgresql+asyncpg://")
-        elif self.url.startswith("mysql://"):
+        if self.url.startswith("mysql://"):
             return self.url.replace("mysql://", "mysql+aiomysql://")
         return self.url
 
 
 class SecurityConfig(BaseModel):
-    """Security configuration for tools and operations"""
+    """Security configuration for tools and operations."""
 
-    # File operation security
     allowed_directories: List[Path] = Field(
         default_factory=lambda: [
             Path.cwd(),
@@ -95,7 +94,6 @@ class SecurityConfig(BaseModel):
         description="Regex patterns for blocked file paths"
     )
 
-    # SQL security
     allowed_sql_commands: List[str] = Field(
         default=["SELECT", "INSERT", "UPDATE", "DELETE"],
         description="Allowed SQL command types"
@@ -120,7 +118,6 @@ class SecurityConfig(BaseModel):
         description="Maximum allowed SQL query length"
     )
 
-    # Shell command security
     enable_shell_validation: bool = Field(
         default=True,
         description="Enable shell command validation"
@@ -140,7 +137,6 @@ class SecurityConfig(BaseModel):
         description="Shell commands that are always blocked"
     )
 
-    # General security
     enable_audit_log: bool = Field(
         default=True,
         description="Enable security audit logging"
@@ -154,7 +150,7 @@ class SecurityConfig(BaseModel):
 
 
 class ShellConfig(BaseModel):
-    """Configuration for shell/bash tools"""
+    """Configuration for shell/bash tools."""
 
     default_timeout: int = Field(
         default=120,
@@ -187,7 +183,7 @@ class ShellConfig(BaseModel):
 
 
 class GitConfig(BaseModel):
-    """Configuration for Git/GitHub tools"""
+    """Configuration for Git/GitHub tools."""
 
     default_remote: str = Field(
         default="origin",
@@ -216,7 +212,7 @@ class GitConfig(BaseModel):
 
 
 class WebSearchConfig(BaseModel):
-    """Configuration for web search tools"""
+    """Configuration for web search tools."""
 
     provider: Literal["brave", "serper", "duckduckgo"] = Field(
         default="brave",
@@ -255,7 +251,7 @@ class WebSearchConfig(BaseModel):
 
 
 class MultimodalConfig(BaseModel):
-    """Configuration for multimodal tools (images, PDFs)"""
+    """Configuration for multimodal tools (images, PDFs)."""
 
     vision_provider: Literal["claude", "gpt4v", "gemini"] = Field(
         default="claude",
@@ -294,7 +290,7 @@ class MultimodalConfig(BaseModel):
 
 
 class InteractionConfig(BaseModel):
-    """Configuration for user interaction tools"""
+    """Configuration for user interaction tools."""
 
     use_rich_prompts: bool = Field(
         default=True,
@@ -313,7 +309,7 @@ class InteractionConfig(BaseModel):
 
 
 class AgentConfig(BaseModel):
-    """Configuration for individual agents"""
+    """Configuration for individual agents."""
 
     name: str = Field(description="Agent name")
     model_provider: ModelProvider = Field(
@@ -350,7 +346,7 @@ class AgentConfig(BaseModel):
 
 
 class ObservabilityConfig(BaseModel):
-    """Observability configuration (logging, tracing, metrics)"""
+    """Observability configuration (logging, tracing, metrics)."""
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO",
@@ -385,7 +381,7 @@ class ObservabilityConfig(BaseModel):
 
 
 class TeamConfig(BaseModel):
-    """Configuration for agent teams"""
+    """Configuration for agent teams."""
 
     name: str = Field(description="Team name")
     agents: List[str] = Field(
@@ -408,28 +404,21 @@ class TeamConfig(BaseModel):
 
 
 class AppSettings(BaseSettings):
-    """
-    Main application settings.
-
-    Loaded from environment variables and settings.yaml.
-    Environment variables take precedence.
-    """
+    """Main application settings loaded from env vars and settings.yaml."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
         case_sensitive=False,
-        extra="ignore",  # Ignore extra environment variables
+        extra="ignore",
     )
 
-    # Environment-specific settings
     environment: Literal["development", "staging", "production"] = Field(
         default="development",
         description="Deployment environment"
     )
 
-    # LLM Provider Configuration
     azure_api_key: Optional[str] = Field(
         default=None,
         alias="AZURE_OPENAI_API_KEY",
@@ -462,7 +451,6 @@ class AppSettings(BaseSettings):
         description="Google API key"
     )
 
-    # Component Configurations
     database: DatabaseConfig = Field(
         default_factory=DatabaseConfig,
         description="Database configuration"
@@ -476,7 +464,6 @@ class AppSettings(BaseSettings):
         description="Observability configuration"
     )
 
-    # Tool Configurations
     shell_config: ShellConfig = Field(
         default_factory=ShellConfig,
         description="Shell/bash tool configuration",
@@ -499,7 +486,6 @@ class AppSettings(BaseSettings):
         description="User interaction configuration"
     )
 
-    # Agent and Team Configurations
     agents: Dict[str, AgentConfig] = Field(
         default_factory=dict,
         description="Agent configurations"
@@ -509,7 +495,6 @@ class AppSettings(BaseSettings):
         description="Team configurations"
     )
 
-    # Default model provider
     default_provider: ModelProvider = Field(
         default=ModelProvider.AZURE,
         description="Default LLM provider"
@@ -518,13 +503,11 @@ class AppSettings(BaseSettings):
     @field_validator("azure_api_key", "azure_endpoint")
     @classmethod
     def validate_azure_config(cls, v, info):
-        """Validate Azure configuration when Azure is the default provider"""
-        # Get the field name and check if Azure is the default provider
+        """Validate Azure config is set when Azure is default provider."""
         field_name = info.field_name
         data = info.data
 
-        # If default_provider is Azure, require these fields
-        if data.get("default_provider") == ModelProvider.AZURE or data.get("default_provider") == "azure":
+        if data.get("default_provider") in (ModelProvider.AZURE, "azure"):
             if not v:
                 raise ValueError(
                     f"{field_name} is required when Azure is the default provider. "
@@ -533,15 +516,7 @@ class AppSettings(BaseSettings):
         return v
 
     def get_llm_config(self, provider: Optional[ModelProvider] = None) -> dict:
-        """
-        Get LLM configuration for specified provider.
-
-        Args:
-            provider: LLM provider (defaults to default_provider)
-
-        Returns:
-            Configuration dict for ChatCompletionClient.load_component()
-        """
+        """Get LLM configuration for specified provider."""
         provider = provider or self.default_provider
 
         if provider == ModelProvider.AZURE:
@@ -558,7 +533,7 @@ class AppSettings(BaseSettings):
                 "api_version": self.azure_api_version,
             }
 
-        elif provider == ModelProvider.OPENAI:
+        if provider == ModelProvider.OPENAI:
             if not self.openai_api_key:
                 raise ValueError("OPENAI_API_KEY not set")
             return {
@@ -567,7 +542,7 @@ class AppSettings(BaseSettings):
                 "api_key": self.openai_api_key,
             }
 
-        elif provider == ModelProvider.GOOGLE:
+        if provider == ModelProvider.GOOGLE:
             if not self.google_api_key:
                 raise ValueError("GOOGLE_API_KEY not set")
             return {
@@ -576,24 +551,14 @@ class AppSettings(BaseSettings):
                 "api_key": self.google_api_key,
             }
 
-        else:
-            raise ValueError(f"Unknown provider: {provider}")
+        raise ValueError(f"Unknown provider: {provider}")
 
     def get_model_client(self, provider: Optional[ModelProvider] = None):
-        """
-        Get ChatCompletionClient for specified provider.
-
-        Args:
-            provider: LLM provider (defaults to default_provider)
-
-        Returns:
-            ChatCompletionClient instance
-        """
+        """Get ChatCompletionClient for specified provider."""
         from autogen_core.models import ChatCompletionClient
 
         llm_config = self.get_llm_config(provider)
 
-        # For Azure, add model_info to avoid validation error
         if provider == ModelProvider.AZURE or (provider is None and self.default_provider == ModelProvider.AZURE):
             llm_config["model_info"] = {
                 "vision": True,
@@ -611,7 +576,6 @@ class AppSettings(BaseSettings):
         return ChatCompletionClient.load_component(component_config)
 
 
-# Singleton instance with thread safety
 import threading
 
 _settings: Optional[AppSettings] = None
@@ -619,30 +583,20 @@ _settings_lock = threading.Lock()
 
 
 def get_settings() -> AppSettings:
-    """
-    Get application settings singleton with thread-safe initialization.
-
-    Returns:
-        AppSettings instance
-    """
+    """Get thread-safe application settings singleton."""
     global _settings
     if _settings is None:
         with _settings_lock:
-            # Double-check after acquiring lock
             if _settings is None:
-                # Temporarily remove conflicting environment variables
-                # Save original values
                 shell_backup = os.environ.get('SHELL')
                 allowed_ip_backup = os.environ.get('ALLOWED_IP')
 
-                # Remove them temporarily
                 os.environ.pop('SHELL', None)
                 os.environ.pop('ALLOWED_IP', None)
 
                 try:
                     _settings = AppSettings()
                 finally:
-                    # Restore original values
                     if shell_backup:
                         os.environ['SHELL'] = shell_backup
                     if allowed_ip_backup:
@@ -652,15 +606,7 @@ def get_settings() -> AppSettings:
 
 
 def load_settings_from_yaml(yaml_path: Path) -> AppSettings:
-    """
-    Load settings from YAML file.
-
-    Args:
-        yaml_path: Path to settings.yaml
-
-    Returns:
-        AppSettings instance with values from YAML
-    """
+    """Load settings from YAML file."""
     import yaml
 
     with open(yaml_path) as f:
@@ -670,7 +616,7 @@ def load_settings_from_yaml(yaml_path: Path) -> AppSettings:
 
 
 def reset_settings():
-    """Reset settings singleton (useful for testing) - thread-safe"""
+    """Reset settings singleton (for testing)."""
     global _settings
     with _settings_lock:
         _settings = None

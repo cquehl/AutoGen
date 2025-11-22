@@ -17,12 +17,7 @@ class PathValidator:
     """
 
     def __init__(self, config):
-        """
-        Initialize path validator.
-
-        Args:
-            config: SecurityConfig with allowed directories and blocked patterns
-        """
+        """Initialize path validator."""
         self.allowed_directories = [
             Path(d).resolve() for d in config.allowed_directories
         ]
@@ -33,16 +28,7 @@ class PathValidator:
         file_path: str,
         operation: str = "read"
     ) -> Tuple[bool, Optional[str], Optional[Path]]:
-        """
-        Validate file path for security.
-
-        Args:
-            file_path: Path to validate
-            operation: Operation type ("read" or "write")
-
-        Returns:
-            (is_valid, error_message, resolved_path) tuple
-        """
+        """Validate file path for security. Returns (is_valid, error_message, resolved_path)."""
         try:
             # First expand user without resolving symlinks
             path = Path(file_path).expanduser()
@@ -136,16 +122,7 @@ class PathValidator:
             return False, f"Invalid file path: {str(e)}", None
 
     def is_safe(self, file_path: str, operation: str = "read") -> bool:
-        """
-        Check if path is safe (simple boolean check).
-
-        Args:
-            file_path: Path to check
-            operation: Operation type
-
-        Returns:
-            True if safe, False otherwise
-        """
+        """Check if path is safe."""
         is_valid, _, _ = self.validate(file_path, operation)
         return is_valid
 

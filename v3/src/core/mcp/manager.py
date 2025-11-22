@@ -47,19 +47,16 @@ class MCPManager(LoggerMixin):
         self.client_manager = MCPClientManager(max_connections=self.config.max_connections)
         self.server_supervisor = MCPServerSupervisor()
 
-        # Runtime state
         self.initialized = False
         self.connected_servers: Dict[str, MCPConnection] = {}
         self.available_tools: Dict[str, MCPTool] = {}
-        self.tool_to_server: Dict[str, str] = {}  # Map tool names to server names
+        self.tool_to_server: Dict[str, str] = {}
         self.resources: Dict[str, MCPResource] = {}
 
-        # Caching
         self.cache_enabled = self.config.cache_enabled
         self.cache: Dict[str, Any] = {}
         self.cache_timestamps: Dict[str, datetime] = {}
 
-        # Performance monitoring
         self.operation_counts: Dict[str, int] = {}
         self.operation_times: Dict[str, List[float]] = {}
 
@@ -78,12 +75,10 @@ class MCPManager(LoggerMixin):
         self.logger.info("Initializing MCP subsystem...")
 
         try:
-            # Start auto-start servers
             for server_config in self.config.servers:
                 if server_config.auto_start:
                     await self._start_and_connect_server(server_config)
 
-            # Discover tools from connected servers
             await self._discover_tools()
 
             self.initialized = True
@@ -104,10 +99,8 @@ class MCPManager(LoggerMixin):
         try:
             self.logger.info(f"Starting MCP server: {config.name}")
 
-            # Start the server
             server = await self.server_supervisor.start_server(config)
 
-            # Create client and connect
             client = await self.client_manager.create_client(
                 server_id=config.name,
                 transport_type=config.transport,
@@ -119,7 +112,6 @@ class MCPManager(LoggerMixin):
                 }
             )
 
-            # Initialize connection
             connection = MCPConnection(
                 server_id=config.name,
                 server=server,
@@ -145,7 +137,6 @@ class MCPManager(LoggerMixin):
         """
         discovered = []
 
-        # Get configured servers
         for config in self.config.servers:
             server = MCPServer(
                 id=config.name,
@@ -171,17 +162,14 @@ class MCPManager(LoggerMixin):
         Returns:
             MCP connection object
         """
-        # Check if already connected
         if server_name in self.connected_servers:
             self.logger.info(f"Already connected to server: {server_name}")
             return self.connected_servers[server_name]
 
-        # Find server configuration
         config = self.config.get_server_config(server_name)
         if not config:
             raise MCPOperationError(f"No configuration found for server: {server_name}")
 
-        # Start and connect
         await self._start_and_connect_server(config)
 
         # Re-discover tools after new connection
@@ -203,13 +191,9 @@ class MCPManager(LoggerMixin):
         try:
             connection = self.connected_servers[server_name]
 
-            # Close client connection
             await self.client_manager.close_client(server_name)
-
-            # Stop server if managed by us
             await self.server_supervisor.stop_server(server_name)
 
-            # Clean up tools from this server
             tools_to_remove = [
                 tool_name for tool_name, server in self.tool_to_server.items()
                 if server == server_name
@@ -218,7 +202,6 @@ class MCPManager(LoggerMixin):
                 del self.available_tools[tool_name]
                 del self.tool_to_server[tool_name]
 
-            # Remove connection
             del self.connected_servers[server_name]
 
             self.logger.info(f"Disconnected from server: {server_name}")
@@ -234,7 +217,6 @@ class MCPManager(LoggerMixin):
 
         for server_name, connection in self.connected_servers.items():
             try:
-                # Get tools from server
                 tools = await connection.client.list_tools() if hasattr(connection.client, 'list_tools') else []
 
                 for tool in tools:
@@ -266,7 +248,6 @@ class MCPManager(LoggerMixin):
 
         tools = list(self.available_tools.values())
 
-        # Filter by agent permissions if specified
         if agent_name:
             allowed_servers = self.config.get_allowed_servers_for_agent(agent_name)
             tools = [
@@ -307,7 +288,6 @@ class MCPManager(LoggerMixin):
         correlation_id = get_correlation_id()
 
         try:
-            # Check if tool exists
             if tool_name not in self.available_tools:
                 # Try with server prefix
                 available = [name for name in self.available_tools.keys() if name.endswith(f".{tool_name}")]
@@ -316,7 +296,6 @@ class MCPManager(LoggerMixin):
                 else:
                     raise MCPOperationError(f"Tool not found: {tool_name}")
 
-            # Check agent permissions
             if agent_name:
                 allowed_tools = await self.list_tools(agent_name)
                 allowed_names = [t.name for t in allowed_tools]
@@ -325,28 +304,24 @@ class MCPManager(LoggerMixin):
                         f"Agent {agent_name} is not authorized to use tool: {tool_name}"
                     )
 
-            # Get server and client
             server_name = self.tool_to_server[tool_name]
             if server_name not in self.connected_servers:
                 await self.connect_server(server_name)
 
             connection = self.connected_servers[server_name]
 
-            # Log audit event
             if self.config.audit_logging:
                 self.logger.info(
                     f"MCP Tool Execution | Agent: {agent_name} | Tool: {tool_name} | "
                     f"Server: {server_name} | Correlation: {correlation_id}"
                 )
 
-            # Execute with timeout
             timeout = timeout or self.config.operation_timeout
             result = await asyncio.wait_for(
                 connection.client.execute_tool(tool_name, arguments),
                 timeout=timeout
             )
 
-            # Track metrics
             execution_time = (datetime.utcnow() - start_time).total_seconds()
             self._track_operation(tool_name, execution_time)
 

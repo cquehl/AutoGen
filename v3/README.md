@@ -1,85 +1,41 @@
-# 🥃 Suntory System v3
-
-> **Alfred, your Distinguished AI Concierge**
+# Suntory System v3
 
 A production-grade multi-agent AI system built on AutoGen, featuring intelligent task routing, specialist team orchestration, and autonomous execution capabilities.
 
-## ✨ What Makes Suntory v3 Special
+## Features
 
-**Simplified Architecture, Enhanced Capabilities:**
-- ✅ **Dual-Mode Operation**: Direct Proxy (quick queries) + Team Orchestrator (complex tasks)
-- ✅ **Multi-Provider LLM Support**: OpenAI, Anthropic Claude, Google Gemini with automatic fallback
-- ✅ **Magentic-One Architecture**: Autonomous web research, file navigation, code generation, terminal execution
-- ✅ **Production-Ready**: Docker sandboxing, structured logging, persistence, observability
-- ✅ **Beautiful TUI**: Rich terminal interface with markdown rendering
-- ✅ **Premium Experience**: Think premium consulting platform, not chatbot
+- **Dual-Mode Operation**: Direct Proxy (quick queries) + Team Orchestrator (complex tasks)
+- **Multi-Provider LLM Support**: OpenAI, Anthropic Claude, Google Gemini with automatic fallback
+- **Magentic-One Architecture**: Autonomous web research, file navigation, code generation, terminal execution
+- **Production-Ready**: Docker sandboxing, structured logging, persistence, observability
+- **Rich Terminal UI**: Beautiful interface with markdown rendering
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
-- **Python 3.11+** (required)
-- **Docker** (recommended for sandboxing)
-- **API Keys** for at least one provider:
-  - OpenAI (`OPENAI_API_KEY`)
-  - Anthropic (`ANTHROPIC_API_KEY`)
-  - Google (`GOOGLE_API_KEY`)
+- Python 3.11+
+- Docker (recommended)
+- API key for at least one provider: OpenAI, Anthropic, or Google
 
 ### Installation
 
 ```bash
-# 1. Navigate to v3 directory
 cd v3/
-
-# 2. Copy environment template
 cp .env.example .env
-
-# 3. Add your API keys to .env
-# Edit .env and add at least one API key
-
-# 4. Run Suntory (handles all setup automatically)
+# Edit .env and add your API keys
 ./Suntory.sh
 ```
 
-That's it! The script will:
-- ✓ Check Python version
-- ✓ Create virtual environment
-- ✓ Install dependencies
-- ✓ Start Docker containers
-- ✓ Initialize database
-- ✓ Launch Alfred
+The script handles virtual environment creation, dependency installation, Docker containers, database initialization, and launches Alfred.
 
-## 🎯 How It Works
+## How It Works
 
 ### Alfred's Two Modes
 
-#### 1. **Direct Proxy Mode** (Default)
-Alfred handles simple queries directly, acting as an intelligent middleware:
+**1. Direct Proxy Mode** - Alfred handles simple queries directly for quick answers, explanations, and conversations.
 
-```
-User: "What's the weather like?"
-Alfred: [Direct mode] → LLM → Response
-```
-
-**Use for:**
-- Questions and answers
-- Simple code explanations
-- Quick lookups
-- Conversational interactions
-
-#### 2. **Team Orchestrator Mode** (Automatic)
-Alfred assembles specialist agents for complex tasks:
-
-```
-User: "Build a data pipeline for manufacturing metrics"
-Alfred: [Team mode] → Assemble: [Product, Data Scientist, Engineer, QA]
-        → Coordinate execution → Deliver result
-```
-
-**Triggers automatically for:**
-- Keywords: "build", "create", "implement", "design", "analyze"
-- Complex multi-step tasks
-- Explicit request: `/team <task>`
+**2. Team Orchestrator Mode** - Alfred assembles specialist agents for complex tasks. Triggers automatically on keywords like "build", "create", "implement", "design", "analyze" or via `/team <task>` command.
 
 ### Specialist Agents
 
@@ -210,7 +166,7 @@ v3/
 └── logs/                    # Structured logs
 ```
 
-## 🔧 Configuration
+## Configuration
 
 All configuration is in `.env`:
 
@@ -234,7 +190,7 @@ ALFRED_GREETING_STYLE=time_aware  # formal, casual, time_aware
 ALFRED_PERSONALITY=balanced       # professional, witty, balanced
 ```
 
-## 🐳 Docker Services
+## Docker Services
 
 ```bash
 # Start all services
@@ -256,9 +212,9 @@ docker-compose --profile observability up -d
 - **prometheus**: Metrics collection (optional)
 - **grafana**: Visualization dashboard (optional)
 
-## 📊 Features
+## Features Status
 
-### ✅ Implemented
+### Implemented
 
 - [x] Multi-provider LLM support (OpenAI, Claude, Gemini)
 - [x] Direct Proxy mode (Alfred as middleware)
@@ -273,7 +229,7 @@ docker-compose --profile observability up -d
 - [x] Graceful error handling and fallback
 - [x] Model switching at runtime
 
-### 🚧 Roadmap
+### Roadmap
 
 - [ ] Full Playwright integration for Web Surfer
 - [ ] Code execution in sandboxed containers
@@ -284,7 +240,7 @@ docker-compose --profile observability up -d
 - [ ] Web UI (in addition to terminal)
 - [ ] Cloud deployment (AWS, GCP, Azure)
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run tests
@@ -297,7 +253,7 @@ pytest tests/ --cov=src --cov-report=html
 pytest tests/test_alfred.py
 ```
 
-## 🔒 Security
+## Security
 
 **Built-in Security Features:**
 
@@ -308,33 +264,8 @@ pytest tests/test_alfred.py
 5. **Audit Logging**: All actions logged with correlation IDs
 6. **No Host Access**: Containers cannot access host filesystem
 
-## 🎯 Use Cases
 
-### Software Consulting
-- Full-stack application development
-- Code review and refactoring
-- Architecture design and review
-- Security audits
-
-### Data Engineering
-- ETL pipeline design
-- Data analysis and visualization
-- Database optimization
-- ML model development
-
-### Operations
-- Infrastructure as code
-- CI/CD pipeline setup
-- Monitoring and alerting
-- Incident response
-
-### Product Development
-- Feature planning and prioritization
-- User story writing
-- UX/UI design feedback
-- Quality assurance
-
-## 🤝 Contributing
+## Contributing
 
 This is a v3 rewrite focused on simplicity and robustness. Contributions welcome!
 
@@ -344,26 +275,12 @@ This is a v3 rewrite focused on simplicity and robustness. Contributions welcome
 - Premium experience (think consulting platform)
 - Security first (sandboxing, validation)
 
-## 📝 License
+## License
 
 MIT License - see LICENSE file
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
-Built with:
-- [AutoGen](https://microsoft.github.io/autogen/) - Multi-agent framework
-- [LiteLLM](https://docs.litellm.ai/) - Unified LLM API
-- [Rich](https://rich.readthedocs.io/) - Beautiful terminal UI
-- [ChromaDB](https://www.trychroma.com/) - Vector database
-- [Pydantic](https://docs.pydantic.dev/) - Data validation
+Built with [AutoGen](https://microsoft.github.io/autogen/), [LiteLLM](https://docs.litellm.ai/), [Rich](https://rich.readthedocs.io/), [ChromaDB](https://www.trychroma.com/), and [Pydantic](https://docs.pydantic.dev/).
 
-Inspired by:
-- Microsoft's Magentic-One architecture
-- Traditional English butler service (Alfred's character)
-- Premium Japanese whisky craftsmanship (Suntory's philosophy)
-
----
-
-**Built with care by the Suntory team.**
-
-*"Smooth, refined, production-ready."*
+Inspired by Microsoft's Magentic-One architecture.

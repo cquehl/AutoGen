@@ -177,7 +177,6 @@ class WorkflowExecutor:
             ValueError: If no entry nodes found
             CircuitBreakerOpen: If circuit breaker opens
         """
-        # Initialize context with unique ID
         context = ExecutionContext(
             workflow_id=f"workflow_{uuid.uuid4().hex[:12]}",
             state=initial_state or {},
@@ -185,7 +184,6 @@ class WorkflowExecutor:
             start_time=datetime.now(),
         )
 
-        # Add initial task message
         await context.add_message({
             "role": "user",
             "content": task,
@@ -195,7 +193,6 @@ class WorkflowExecutor:
         logger.info(f"Starting workflow execution: {context.workflow_id}")
 
         try:
-            # Determine entry nodes
             if entry_node:
                 entry_nodes = [entry_node]
             else:
@@ -204,7 +201,6 @@ class WorkflowExecutor:
             if not entry_nodes:
                 raise ValueError("No entry nodes found in workflow graph")
 
-            # Execute from entry nodes
             await self._execute_nodes(entry_nodes, context)
 
             context.status = ExecutionStatus.COMPLETED
@@ -242,16 +238,13 @@ class WorkflowExecutor:
         if visited is None:
             visited = set()
 
-        # Filter out already visited nodes
         nodes_to_execute = [n for n in node_names if n not in visited]
         if not nodes_to_execute:
             return
 
-        # Mark nodes as visited
         for node_name in nodes_to_execute:
             visited.add(node_name)
 
-        # Execute nodes concurrently if multiple
         if len(nodes_to_execute) > 1:
             logger.info(f"Executing {len(nodes_to_execute)} nodes concurrently: {nodes_to_execute}")
             tasks = [
@@ -269,10 +262,8 @@ class WorkflowExecutor:
                     if isinstance(result, (CircuitBreakerOpen, asyncio.CancelledError)):
                         raise result
         else:
-            # Single node execution
             await self._execute_single_node(nodes_to_execute[0], context)
 
-        # Find next nodes to execute
         all_next_nodes = []
         for node_name in nodes_to_execute:
             next_nodes = await self._get_next_nodes(node_name, context)
@@ -281,7 +272,6 @@ class WorkflowExecutor:
         # Remove duplicates while preserving order
         unique_next_nodes = list(dict.fromkeys(all_next_nodes))
 
-        # Continue execution if there are next nodes
         if unique_next_nodes:
             await self._execute_nodes(unique_next_nodes, context, visited)
 
@@ -301,7 +291,6 @@ class WorkflowExecutor:
         if not node:
             raise ValueError(f"Node '{node_name}' not found in graph")
 
-        # Check circuit breaker
         failure_count = context.failure_counts.get(node_name, 0)
         if failure_count >= self.circuit_breaker_threshold:
             raise CircuitBreakerOpen(
@@ -314,26 +303,21 @@ class WorkflowExecutor:
         semaphore = await self._ensure_semaphore()
         last_error = None
 
-        # Retry loop
         for attempt in range(self.max_retries):
             async with semaphore:
                 try:
-                    # Get agent instance
                     agent = await self._get_agent(node.agent_name)
-
-                    # Build task from context
                     task = await self._build_task_for_node(node, context)
 
-                    # Execute agent with timeout
                     result = await asyncio.wait_for(
                         self._run_agent(agent, task, context),
                         timeout=self.default_timeout,
                     )
 
-                    # Store result (thread-safe)
+                    # Thread-safe result storage
                     await context.set_node_result(node_name, result)
 
-                    # Add result to messages (thread-safe)
+                    # Thread-safe message addition
                     await context.add_message({
                         "role": "assistant",
                         "name": node.agent_name,
@@ -347,7 +331,7 @@ class WorkflowExecutor:
                     })
 
                     logger.info(f"Node execution completed: {node_name} (attempt {attempt + 1})")
-                    return  # Success!
+                    return
 
                 except asyncio.TimeoutError as e:
                     last_error = e
@@ -355,8 +339,7 @@ class WorkflowExecutor:
                     await context.increment_retry(node_name)
 
                     if attempt < self.max_retries - 1:
-                        # Exponential backoff
-                        await asyncio.sleep(2 ** attempt)
+                        await asyncio.sleep(2 ** attempt)  # Exponential backoff
 
                 except Exception as e:
                     last_error = e
@@ -366,10 +349,8 @@ class WorkflowExecutor:
                     await context.increment_retry(node_name)
 
                     if attempt < self.max_retries - 1:
-                        # Exponential backoff
-                        await asyncio.sleep(2 ** attempt)
+                        await asyncio.sleep(2 ** attempt)  # Exponential backoff
 
-        # All retries exhausted
         await context.increment_failure(node_name)
         logger.error(
             f"Node execution failed after {self.max_retries} attempts: {node_name}",
@@ -392,7 +373,6 @@ class WorkflowExecutor:
         edges = self.graph.get_edges_from(current_node)
 
         for edge in edges:
-            # Evaluate condition if present
             if edge.condition:
                 try:
                     if edge.condition(context.to_dict()):
@@ -406,8 +386,7 @@ class WorkflowExecutor:
                         exc_info=True
                     )
             else:
-                # No condition, always traverse
-                next_nodes.append(edge.target)
+                next_nodes.append(edge.target)  # No condition, always traverse
 
         return next_nodes
 
@@ -428,7 +407,6 @@ class WorkflowExecutor:
         if not agent_metadata:
             raise ValueError(f"Agent '{agent_name}' not found in registry")
 
-        # Extract agent instance
         if isinstance(agent_metadata, dict):
             agent = agent_metadata.get("instance") or agent_metadata.get("agent_class")
         else:
@@ -454,8 +432,7 @@ class WorkflowExecutor:
         Returns:
             Task string for the agent
         """
-        # Use the last message as the task
-        # More sophisticated implementations could build context-aware prompts
+        # TODO: More sophisticated implementations could build context-aware prompts
         # from multiple messages or node-specific context
         if context.last_message:
             return context.last_message.get("content", "")
@@ -482,18 +459,15 @@ class WorkflowExecutor:
             ValueError: If agent doesn't have a compatible run method
         """
         try:
-            # Try async run first
             if hasattr(agent, 'arun'):
                 result = await agent.arun(task)
             elif hasattr(agent, 'run'):
-                # Run synchronous method in thread pool
                 result = await asyncio.to_thread(agent.run, task)
             else:
                 raise ValueError(
                     f"Agent {getattr(agent, 'name', 'unknown')} has no run() or arun() method"
                 )
 
-            # Normalize result to dict format
             if isinstance(result, str):
                 return {"content": result, "status": "success"}
             elif isinstance(result, dict):

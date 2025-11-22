@@ -34,13 +34,7 @@ class HistoryService:
         message_bus: "MessageBus",
         observability_manager: "ObservabilityManager"
     ) -> None:
-        """
-        Initialize history service.
-
-        Args:
-            message_bus: MessageBus instance for event history
-            observability_manager: ObservabilityManager for execution logs
-        """
+        """Initialize history service."""
         self.message_bus = message_bus
         self.observability_manager = observability_manager
         self.conversation_storage_path = Path(".autogen_conversations")
@@ -52,36 +46,21 @@ class HistoryService:
         include_events: bool = True,
         include_tool_executions: bool = True,
     ) -> List[Dict[str, Any]]:
-        """
-        Get recent actions across all history sources.
-
-        Args:
-            limit: Maximum number of actions to return
-            include_conversations: Include conversation messages
-            include_events: Include message bus events
-            include_tool_executions: Include tool execution events
-
-        Returns:
-            List of action dictionaries, sorted by timestamp (newest first)
-        """
+        """Get recent actions across all history sources, sorted by timestamp (newest first)."""
         all_actions = []
 
-        # Get conversation messages
         if include_conversations:
             conv_messages = self._get_recent_conversations(limit * 2)
             all_actions.extend(conv_messages)
 
-        # Get message bus events
         if include_events:
             bus_events = self._get_recent_bus_events(limit * 2)
             all_actions.extend(bus_events)
 
-        # Get tool execution logs
         if include_tool_executions:
             tool_logs = self._get_recent_tool_executions(limit * 2)
             all_actions.extend(tool_logs)
 
-        # Sort by timestamp (newest first) and limit
         all_actions.sort(key=lambda x: x.get("timestamp", datetime.min), reverse=True)
 
         return all_actions[:limit]
@@ -90,27 +69,16 @@ class HistoryService:
         self,
         session_duration_minutes: int = 60,
     ) -> Dict[str, Any]:
-        """
-        Get all history from the current session.
-
-        Args:
-            session_duration_minutes: How far back to look for "current session"
-
-        Returns:
-            Dictionary with categorized session history
-        """
+        """Get all history from the current session."""
         cutoff_time = datetime.now() - timedelta(minutes=session_duration_minutes)
 
-        # Get all recent actions
         recent_actions = self.get_recent_actions(limit=100)
 
-        # Filter to current session
         session_actions = [
             action for action in recent_actions
             if action.get("timestamp", datetime.min) >= cutoff_time
         ]
 
-        # Categorize by type
         categorized = {
             "conversations": [],
             "agent_interactions": [],
@@ -136,19 +104,9 @@ class HistoryService:
         start: datetime,
         end: datetime,
     ) -> List[Dict[str, Any]]:
-        """
-        Get history within a specific time range.
-
-        Args:
-            start: Start time
-            end: End time
-
-        Returns:
-            List of actions within the time range
-        """
+        """Get history within a specific time range."""
         all_actions = self.get_recent_actions(limit=1000)
 
-        # Filter by time range
         filtered = [
             action for action in all_actions
             if start <= action.get("timestamp", datetime.min) <= end
@@ -157,19 +115,10 @@ class HistoryService:
         return filtered
 
     def _get_recent_conversations(self, limit: int) -> List[Dict[str, Any]]:
-        """
-        Get recent conversation messages from stored conversations.
-
-        Args:
-            limit: Maximum number of messages
-
-        Returns:
-            List of conversation message dictionaries
-        """
+        """Get recent conversation messages from stored conversations."""
         conversations = []
 
         try:
-            # Get all conversation files
             if not self.conversation_storage_path.exists():
                 return []
 
@@ -179,8 +128,7 @@ class HistoryService:
                 reverse=True,
             )
 
-            # Load recent conversations
-            for conv_file in conv_files[:5]:  # Load last 5 conversation files
+            for conv_file in conv_files[:5]:
                 try:
                     with open(conv_file, "r") as f:
                         data = json.load(f)
@@ -207,24 +155,14 @@ class HistoryService:
         except Exception as e:
             logger.error(f"Error accessing conversation history: {e}")
 
-        # Sort by timestamp and limit
         conversations.sort(key=lambda x: x["timestamp"], reverse=True)
         return conversations[:limit]
 
     def _get_recent_bus_events(self, limit: int) -> List[Dict[str, Any]]:
-        """
-        Get recent message bus events.
-
-        Args:
-            limit: Maximum number of events
-
-        Returns:
-            List of event dictionaries
-        """
+        """Get recent message bus events."""
         events = []
 
         try:
-            # Get events from message bus history
             if not self.message_bus:
                 logger.warning("Message bus not available for history retrieval")
                 return events
@@ -246,22 +184,12 @@ class HistoryService:
         return events
 
     def _get_recent_tool_executions(self, limit: int) -> List[Dict[str, Any]]:
-        """
-        Get recent tool execution events from message bus.
-
-        Args:
-            limit: Maximum number of executions
-
-        Returns:
-            List of tool execution dictionaries
-        """
+        """Get recent tool execution events from message bus."""
         tool_executions = []
 
         try:
-            # Import EventType to filter
             from ..messaging.events import EventType
 
-            # Get tool execution events from message bus
             bus_events = self.message_bus.get_history(
                 event_type=EventType.TOOL_EXECUTION,
                 limit=limit,
@@ -287,16 +215,7 @@ class HistoryService:
         history: List[Dict[str, Any]],
         include_details: bool = False,
     ) -> str:
-        """
-        Format history in a conversational, user-friendly format for Alfred.
-
-        Args:
-            history: List of history items
-            include_details: Include detailed information
-
-        Returns:
-            Formatted string suitable for conversational display
-        """
+        """Format history in a conversational, user-friendly format for Alfred."""
         if not history:
             return "No recent activity found."
 
@@ -306,19 +225,17 @@ class HistoryService:
             item_type = item.get("type", "unknown")
             timestamp = item.get("timestamp")
 
-            # Format timestamp
             if isinstance(timestamp, datetime):
                 time_str = timestamp.strftime("%Y-%m-%d %H:%M")
             else:
                 time_str = "Unknown time"
 
-            # Format based on type
             if item_type == "conversation":
                 role = item.get("role", "unknown")
                 content = item.get("content", "")
                 name = item.get("name", role)
 
-                # Truncate long content
+                # Truncate long content unless details requested
                 if len(content) > 100 and not include_details:
                     content = content[:97] + "..."
 
@@ -347,15 +264,7 @@ class HistoryService:
         return "\n".join(output)
 
     def format_session_history(self, session: Dict[str, Any]) -> str:
-        """
-        Format session history for conversational display.
-
-        Args:
-            session: Session history dictionary
-
-        Returns:
-            Formatted string
-        """
+        """Format session history for conversational display."""
         output = []
 
         output.append(f"**Session Summary:**")
@@ -365,7 +274,7 @@ class HistoryService:
         # Conversations
         if session["conversations"]:
             output.append(f"\n**Conversations ({len(session['conversations'])}):**")
-            for conv in session["conversations"][:5]:  # Show top 5
+            for conv in session["conversations"][:5]:
                 role = conv.get("role", "unknown")
                 content = conv.get("content", "")[:80]
                 output.append(f"- {role}: {content}...")
@@ -388,12 +297,7 @@ class HistoryService:
         return "\n".join(output)
 
     def get_statistics(self) -> Dict[str, Any]:
-        """
-        Get overall history statistics.
-
-        Returns:
-            Statistics dictionary
-        """
+        """Get overall history statistics."""
         recent_actions = self.get_recent_actions(limit=1000)
 
         stats = {
@@ -411,10 +315,7 @@ class HistoryService:
     def clear_session_history(self):
         """Clear all session history (warning: destructive operation)."""
         logger.warning("Clearing all session history")
-
-        # Clear message bus history
         self.message_bus.clear_history()
-
         logger.info("Session history cleared")
 
     def __repr__(self) -> str:
