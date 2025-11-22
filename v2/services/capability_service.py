@@ -30,28 +30,16 @@ class CapabilityService:
         settings: "AppSettings",
         cache_ttl_seconds: int = 300
     ) -> None:
-        """
-        Initialize capability service.
-
-        Args:
-            agent_registry: AgentRegistry instance for agent discovery
-            tool_registry: ToolRegistry instance for tool discovery
-            settings: AppSettings for team configurations
-            cache_ttl_seconds: Cache time-to-live in seconds (default: 300 = 5 minutes)
-        """
+        """Initialize capability service."""
         self.agent_registry = agent_registry
         self.tool_registry = tool_registry
         self.settings = settings
-
-        # Cache for capabilities
         self._cache: Dict[str, Any] = {}
         self._last_refresh: Optional[datetime] = None
         self._cache_ttl_seconds = cache_ttl_seconds
 
     def refresh_cache(self) -> None:
-        """
-        Refresh the capabilities cache by introspecting all registries.
-        """
+        """Refresh the capabilities cache by introspecting all registries."""
         self._cache = {
             "agents": self._discover_agents(),
             "tools": self._discover_tools(),
@@ -61,7 +49,6 @@ class CapabilityService:
         self._last_refresh = datetime.now()
 
     def _is_cache_valid(self) -> bool:
-        """Check if cache is still valid."""
         if not self._last_refresh:
             return False
 
@@ -69,25 +56,16 @@ class CapabilityService:
         return elapsed < self._cache_ttl_seconds
 
     def _ensure_cache(self) -> None:
-        """Ensure cache is valid, refresh if needed."""
         if not self._is_cache_valid():
             self.refresh_cache()
 
     def _discover_agents(self) -> List[Dict[str, Any]]:
-        """
-        Discover all registered agents.
-
-        Returns:
-            List of agent capability dictionaries
-        """
+        """Discover all registered agents and enrich with settings."""
         agents = self.agent_registry.list_agents()
 
-        # Enrich with additional info from settings
         enriched_agents = []
         for agent in agents:
             agent_data = agent.copy()
-
-            # Add configuration from settings if available
             agent_name = agent["name"]
             if hasattr(self.settings, 'agents') and agent_name in self.settings.agents:
                 config = self.settings.agents[agent_name]
@@ -104,21 +82,11 @@ class CapabilityService:
         return enriched_agents
 
     def _discover_tools(self) -> List[Dict[str, Any]]:
-        """
-        Discover all registered tools.
-
-        Returns:
-            List of tool capability dictionaries
-        """
+        """Discover all registered tools."""
         return self.tool_registry.list_tools()
 
     def _discover_teams(self) -> List[Dict[str, Any]]:
-        """
-        Discover all configured teams.
-
-        Returns:
-            List of team configuration dictionaries
-        """
+        """Discover all configured teams."""
         teams = []
 
         if hasattr(self.settings, 'teams'):
@@ -134,37 +102,19 @@ class CapabilityService:
         return teams
 
     def _discover_categories(self) -> Dict[str, List[str]]:
-        """
-        Discover all categories of agents and tools.
-
-        Returns:
-            Dictionary mapping category types to lists of categories
-        """
+        """Discover all categories of agents and tools."""
         return {
             "agent_categories": self.agent_registry.get_categories(),
             "tool_categories": self.tool_registry.get_categories(),
         }
 
     def get_all_capabilities(self) -> Dict[str, Any]:
-        """
-        Get all system capabilities.
-
-        Returns:
-            Complete capability dictionary with agents, tools, teams
-        """
+        """Get all system capabilities."""
         self._ensure_cache()
         return self._cache
 
     def get_agents(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Get all agents, optionally filtered by category.
-
-        Args:
-            category: Optional category filter
-
-        Returns:
-            List of agent dictionaries
-        """
+        """Get all agents, optionally filtered by category."""
         self._ensure_cache()
         agents = self._cache["agents"]
 
@@ -174,15 +124,7 @@ class CapabilityService:
         return agents
 
     def get_tools(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Get all tools, optionally filtered by category.
-
-        Args:
-            category: Optional category filter
-
-        Returns:
-            List of tool dictionaries
-        """
+        """Get all tools, optionally filtered by category."""
         self._ensure_cache()
         tools = self._cache["tools"]
 
@@ -192,25 +134,12 @@ class CapabilityService:
         return tools
 
     def get_teams(self) -> List[Dict[str, Any]]:
-        """
-        Get all configured teams.
-
-        Returns:
-            List of team dictionaries
-        """
+        """Get all configured teams."""
         self._ensure_cache()
         return self._cache["teams"]
 
     def get_agent_details(self, agent_name: str) -> Optional[Dict[str, Any]]:
-        """
-        Get detailed information about a specific agent.
-
-        Args:
-            agent_name: Name of the agent
-
-        Returns:
-            Agent details dictionary or None if not found
-        """
+        """Get detailed information about a specific agent."""
         agents = self.get_agents()
         for agent in agents:
             if agent["name"] == agent_name:
@@ -218,15 +147,7 @@ class CapabilityService:
         return None
 
     def get_tool_details(self, tool_name: str) -> Optional[Dict[str, Any]]:
-        """
-        Get detailed information about a specific tool.
-
-        Args:
-            tool_name: Name of the tool
-
-        Returns:
-            Tool details dictionary or None if not found
-        """
+        """Get detailed information about a specific tool."""
         tools = self.get_tools()
         for tool in tools:
             if tool["name"] == tool_name:
@@ -234,15 +155,7 @@ class CapabilityService:
         return None
 
     def get_team_details(self, team_name: str) -> Optional[Dict[str, Any]]:
-        """
-        Get detailed information about a specific team.
-
-        Args:
-            team_name: Name of the team
-
-        Returns:
-            Team details dictionary or None if not found
-        """
+        """Get detailed information about a specific team."""
         teams = self.get_teams()
         for team in teams:
             if team["name"] == team_name:
@@ -250,17 +163,11 @@ class CapabilityService:
         return None
 
     def format_capabilities_for_display(self) -> str:
-        """
-        Format capabilities in a conversational, user-friendly format for Alfred.
-
-        Returns:
-            Formatted string suitable for conversational display
-        """
+        """Format capabilities in a conversational, user-friendly format for Alfred."""
         self._ensure_cache()
 
         output = []
 
-        # Format agents
         agents = self._cache["agents"]
         if agents:
             output.append("**Agents:**")
@@ -269,7 +176,6 @@ class CapabilityService:
                 description = agent.get("description", "No description")
                 output.append(f"- {name}: {description}")
 
-        # Format teams
         teams = self._cache["teams"]
         if teams:
             output.append("\n**Teams:**")
@@ -278,10 +184,8 @@ class CapabilityService:
                 agents_list = ", ".join(team.get("agents", []))
                 output.append(f"- {name}: {agents_list}")
 
-        # Format tools by category
         tools = self._cache["tools"]
         if tools:
-            # Group tools by category
             tools_by_category = {}
             for tool in tools:
                 category = tool.get("category", "general")
@@ -297,18 +201,9 @@ class CapabilityService:
         return "\n".join(output)
 
     def get_recommended_team_for_task(self, task_description: str) -> Optional[str]:
-        """
-        Recommend a team based on task description (simple keyword matching).
-
-        Args:
-            task_description: User's task description
-
-        Returns:
-            Recommended team name or None
-        """
+        """Recommend a team based on task description using simple keyword matching."""
         task_lower = task_description.lower()
 
-        # Simple keyword-based routing
         if any(word in task_lower for word in ["weather", "forecast", "temperature", "rain"]):
             return "weather_team"
 
@@ -318,19 +213,13 @@ class CapabilityService:
         if any(word in task_lower for word in ["web", "search", "browse", "research"]):
             return "magentic_one"
 
-        # Default to orchestrator for complex multi-step tasks
         if any(word in task_lower for word in ["complex", "multiple", "steps", "plan"]):
             return "magentic_one"
 
         return None
 
     def to_json(self) -> str:
-        """
-        Export capabilities to JSON string.
-
-        Returns:
-            JSON string of all capabilities
-        """
+        """Export capabilities to JSON string."""
         self._ensure_cache()
         return json.dumps(self._cache, indent=2, default=str)
 

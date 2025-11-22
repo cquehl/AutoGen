@@ -66,47 +66,21 @@ class BaseTool(ABC):
     REQUIRES_SECURITY_VALIDATION: bool = False
 
     def __init__(self, **kwargs):
-        """
-        Initialize tool with optional configuration.
-
-        Args:
-            **kwargs: Tool-specific configuration
-        """
+        """Initialize tool with optional configuration."""
         self.config = kwargs
 
     @abstractmethod
     async def execute(self, **kwargs) -> ToolResult:
-        """
-        Execute the tool.
-
-        Args:
-            **kwargs: Tool-specific parameters
-
-        Returns:
-            ToolResult with outcome
-        """
+        """Execute the tool."""
         pass
 
     @abstractmethod
     def validate_params(self, **kwargs) -> tuple[bool, Optional[str]]:
-        """
-        Validate parameters before execution.
-
-        Args:
-            **kwargs: Parameters to validate
-
-        Returns:
-            (is_valid, error_message) tuple
-        """
+        """Validate parameters before execution."""
         pass
 
     def get_function_schema(self) -> Dict[str, Any]:
-        """
-        Get OpenAI function schema for this tool.
-
-        Returns:
-            Function schema dict
-        """
+        """Get OpenAI function schema for this tool."""
         return {
             "name": self.NAME,
             "description": self.DESCRIPTION,
@@ -115,22 +89,12 @@ class BaseTool(ABC):
 
     @abstractmethod
     def _get_parameters_schema(self) -> Dict[str, Any]:
-        """
-        Get JSON schema for tool parameters.
-
-        Returns:
-            Parameters schema dict
-        """
+        """Get JSON schema for tool parameters."""
         pass
 
     @classmethod
     def get_metadata(cls) -> Dict[str, Any]:
-        """
-        Get tool metadata.
-
-        Returns:
-            Metadata dictionary
-        """
+        """Get tool metadata."""
         return {
             "name": cls.NAME,
             "description": cls.DESCRIPTION,
@@ -163,7 +127,7 @@ class ToolMetadata:
         self.requires_security = requires_security
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary"""
+        """Convert to dictionary."""
         return {
             "name": self.name,
             "description": self.description,

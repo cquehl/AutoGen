@@ -48,12 +48,6 @@ class LLMGateway:
 
         For Azure OpenAI deployments, ensure they have the 'azure/' prefix.
         This allows LiteLLM to correctly route to Azure OpenAI.
-
-        Args:
-            model: Model name or Azure deployment name
-
-        Returns:
-            Normalized model name with proper provider prefix
         """
         # Skip if already has a provider prefix
         if "/" in model:
@@ -91,15 +85,7 @@ class LLMGateway:
         )
 
     def switch_model(self, model: str) -> str:
-        """
-        Switch to a different model.
-
-        Args:
-            model: Model name (e.g., "gpt-4", "claude-3-5-sonnet-20241022")
-
-        Returns:
-            Previous model name
-        """
+        """Switch to a different model. Returns previous model name."""
         previous_model = self.current_model
         self.current_model = self._normalize_model_name(model)
         logger.info(f"Switched model from {previous_model} to {self.current_model}")
@@ -124,21 +110,7 @@ class LLMGateway:
         timeout: int = 120,
         **kwargs
     ) -> Any:
-        """
-        Synchronous completion with automatic retry.
-
-        Args:
-            messages: List of message dictionaries
-            model: Override model (optional)
-            temperature: Sampling temperature
-            max_tokens: Maximum tokens to generate
-            tools: Function calling tools
-            timeout: Request timeout in seconds (default 120s)
-            **kwargs: Additional arguments for LiteLLM
-
-        Returns:
-            LiteLLM completion response
-        """
+        """Synchronous completion with automatic retry."""
         model_to_use = self._normalize_model_name(model) if model else self.current_model
 
         try:
@@ -196,21 +168,7 @@ class LLMGateway:
         timeout: int = 120,
         **kwargs
     ) -> Any:
-        """
-        Asynchronous completion with automatic retry.
-
-        Args:
-            messages: List of message dictionaries
-            model: Override model (optional)
-            temperature: Sampling temperature
-            max_tokens: Maximum tokens to generate
-            tools: Function calling tools
-            timeout: Request timeout in seconds (default 120s)
-            **kwargs: Additional arguments for LiteLLM
-
-        Returns:
-            LiteLLM completion response
-        """
+        """Asynchronous completion with automatic retry."""
         model_to_use = self._normalize_model_name(model) if model else self.current_model
 
         try:
@@ -254,15 +212,7 @@ class LLMGateway:
             raise
 
     def get_fallback_models(self, primary_model: str) -> List[str]:
-        """
-        Get fallback models based on primary model.
-
-        Args:
-            primary_model: Primary model name
-
-        Returns:
-            List of fallback models
-        """
+        """Get fallback models based on primary model."""
         # Claude models
         if "claude" in primary_model.lower():
             return [
@@ -303,17 +253,7 @@ class LLMGateway:
         model: Optional[str] = None,
         **kwargs
     ) -> Any:
-        """
-        Complete with automatic fallback to alternative models.
-
-        Args:
-            messages: List of message dictionaries
-            model: Primary model to try
-            **kwargs: Additional arguments
-
-        Returns:
-            LiteLLM completion response
-        """
+        """Complete with automatic fallback to alternative models."""
         primary_model = model or self.current_model
         fallback_models = self.get_fallback_models(primary_model)
 

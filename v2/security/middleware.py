@@ -82,7 +82,6 @@ class AuditLogger:
         import sqlite3
         from pathlib import Path
 
-        # Ensure directory exists
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
 
         conn = sqlite3.connect(self.db_path)
@@ -152,7 +151,6 @@ class AuditLogger:
             conn.close()
 
     def log_blocked(self, operation: Operation, reason: str):
-        """Log blocked operation"""
         if not self.enabled:
             return
 
@@ -168,7 +166,6 @@ class AuditLogger:
         self._logger.warning(f"BLOCKED: {operation.type.value} - {reason}")
 
     def log_success(self, operation: Operation, result: OperationResult):
-        """Log successful operation"""
         if not self.enabled:
             return
 
@@ -181,14 +178,13 @@ class AuditLogger:
 
         self._write_event(event)
 
-        # Log DELETE operations prominently
+        # CRITICAL SECURITY: Log DELETE operations prominently for audit trail
         if operation.type == OperationType.SQL_QUERY:
             query = operation.params.get("query", "")
             if query.strip().upper().startswith("DELETE"):
                 self._logger.warning(f"DELETE operation executed: {query[:100]}")
 
     def log_error(self, operation: Operation, error: str):
-        """Log operation error"""
         if not self.enabled:
             return
 
@@ -245,12 +241,7 @@ class SecurityMiddleware:
     """
 
     def __init__(self, config):
-        """
-        Initialize security middleware.
-
-        Args:
-            config: SecurityConfig
-        """
+        """Initialize security middleware."""
         self.config = config
         self.validators = {
             "sql": SQLValidator(config),
@@ -262,33 +253,22 @@ class SecurityMiddleware:
         self,
         operation: Operation,
     ) -> OperationResult:
-        """
-        Validate, execute, and audit an operation.
-
-        Args:
-            operation: Operation to execute
-
-        Returns:
-            OperationResult
-        """
+        """Validate, execute, and audit an operation."""
         import time
 
         start_time = time.time()
 
-        # Validate based on operation type
         if operation.type == OperationType.SQL_QUERY:
             is_valid, error = self._validate_sql(operation)
         elif operation.type in [OperationType.FILE_READ, OperationType.FILE_WRITE]:
             is_valid, error = self._validate_file(operation)
         else:
-            is_valid, error = True, None  # No validation for other types yet
+            is_valid, error = True, None
 
-        # Block if validation failed
         if not is_valid:
             self.audit_logger.log_blocked(operation, error)
             return OperationResult.blocked(error)
 
-        # Execute with timeout
         try:
             result = await asyncio.wait_for(
                 operation.executor(**operation.params),
@@ -296,11 +276,7 @@ class SecurityMiddleware:
             )
 
             execution_time_ms = (time.time() - start_time) * 1000
-
-            # Create result
             op_result = OperationResult.ok(result, execution_time_ms)
-
-            # Audit success
             self.audit_logger.log_success(operation, op_result)
 
             return op_result
@@ -315,14 +291,12 @@ class SecurityMiddleware:
             return OperationResult.error(error_msg)
 
     def _validate_sql(self, operation: Operation) -> tuple[bool, Optional[str]]:
-        """Validate SQL query operation"""
         query = operation.params.get("query", "")
         validator = self.validators["sql"]
         is_valid, error, _ = validator.validate(query)
         return is_valid, error
 
     def _validate_file(self, operation: Operation) -> tuple[bool, Optional[str]]:
-        """Validate file operation"""
         file_path = operation.params.get("file_path", "")
         op_type = "write" if operation.type == OperationType.FILE_WRITE else "read"
         validator = self.validators["path"]
@@ -330,15 +304,12 @@ class SecurityMiddleware:
         return is_valid, error
 
     def get_sql_validator(self) -> SQLValidator:
-        """Get SQL validator"""
         return self.validators["sql"]
 
     def get_path_validator(self) -> PathValidator:
-        """Get path validator"""
         return self.validators["path"]
 
     def get_audit_events(self, limit: int = 100) -> list:
-        """Get recent audit events"""
         return self.audit_logger.get_recent_events(limit)
 
     def __repr__(self) -> str:
